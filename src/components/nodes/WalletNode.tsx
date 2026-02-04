@@ -1,20 +1,18 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Wallet, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { NodeData } from '@/types';
+import { WalletConnect } from '../WalletConnect';
 
 function WalletNode({ data, id }: NodeProps) {
   const nodeData = data as NodeData;
   return (
-    <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg min-w-[200px]">
+    <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg min-w-[250px]">
       <div className="p-4">
-        <div className="flex items-center gap-2 mb-2">
-          <Wallet className="w-5 h-5 text-blue-600" />
+        <div className="flex items-center gap-2 mb-3">
           <span className="font-semibold text-gray-800">{nodeData.label}</span>
         </div>
-        <div className="text-sm text-gray-600">
-          SUI Wallet
-        </div>
+        <WalletConnect />
       </div>
 
       {/* Output handle on the right */}

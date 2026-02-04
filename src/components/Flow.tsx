@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -14,6 +14,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import WalletNode from './nodes/WalletNode';
+import { Sidebar } from './layout/Sidebar';
 import type { NodeData } from '@/types';
 
 const nodeTypes: any = {
@@ -40,11 +41,29 @@ let nodeId = 2;
 function FlowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('default');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
     [setEdges]
   );
+
+  const handleToggleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  const handleEdgeTypeChange = useCallback((type: 'default' | 'straight' | 'step' | 'smoothstep') => {
+    setEdgeType(type);
+    setEdges((eds) => eds.map((e) => ({ ...e, type })));
+  }, [setEdges]);
 
   // Listen for custom addNode events from the WalletNode component
   useEffect(() => {
@@ -78,18 +97,24 @@ function FlowCanvas() {
         id: `e${sourceNodeId}-${newNode.id}`,
         source: sourceNodeId,
         target: newNode.id,
-        type: 'smoothstep',
+        type: edgeType,
       };
       setEdges((eds) => [...eds, newEdge]);
     };
 
     window.addEventListener('addNode', handleAddNode);
     return () => window.removeEventListener('addNode', handleAddNode);
-  }, [nodes, setNodes, setEdges]);
+  }, [nodes, setNodes, setEdges, edgeType]);
 
   return (
-    <div className="w-full h-screen bg-gray-50">
-      <div className="w-full h-full">
+    <div ref={containerRef} className="w-full h-screen bg-gray-50">
+      <Sidebar
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={handleToggleFullscreen}
+        edgeType={edgeType}
+        onEdgeTypeChange={handleEdgeTypeChange}
+      />
+      <div className="w-full h-full pl-16">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -99,7 +124,7 @@ function FlowCanvas() {
           nodeTypes={nodeTypes}
           fitView
           defaultEdgeOptions={{
-            type: 'smoothstep',
+            type: edgeType,
             animated: true,
             style: { strokeWidth: 2, stroke: '#3b82f6' },
           }}
