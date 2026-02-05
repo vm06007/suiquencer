@@ -9,11 +9,9 @@ interface SuiNSHelperProps {
 // Note: You can use either @name or name.sui format
 const COMMON_NAMES = [
   '@joythedog',
-  'joythedog.sui',
+  'kartik.sui',
   '@kartik',
   '@surflux',
-  '@americankennelclub',
-  '@brando',
 ];
 
 export function SuiNSHelper({ onSelectName }: SuiNSHelperProps) {

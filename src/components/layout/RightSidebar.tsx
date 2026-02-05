@@ -1,4 +1,4 @@
-import { Play, List, X } from 'lucide-react';
+import { Play, List, X, Trash2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '@/types';
@@ -8,9 +8,13 @@ interface RightSidebarProps {
   edges: Edge[];
   onExecute: () => void;
   isExecuting: boolean;
+  onDeleteSelected: () => void;
+  onInsertNode: () => void;
+  hasSelection: boolean;
+  hasEdgeSelected: boolean;
 }
 
-export function RightSidebar({ nodes, edges, onExecute, isExecuting }: RightSidebarProps) {
+export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, hasSelection, hasEdgeSelected }: RightSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Get execution sequence by following edges from wallet node
@@ -48,14 +52,45 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting }: RightSide
 
   return (
     <>
-      {/* Toggle Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed right-0 top-1/2 -translate-y-1/2 bg-blue-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-blue-700 transition-colors z-40"
-        title="Open Execution Panel"
-      >
-        <List className="w-5 h-5" />
-      </button>
+      {/* Floating Buttons */}
+      <div className="fixed right-0 top-1/2 -translate-y-1/2 flex flex-col gap-2 z-40">
+        {/* Insert Node Button */}
+        <button
+          onClick={onInsertNode}
+          disabled={!hasEdgeSelected}
+          className={`p-3 rounded-l-lg shadow-lg transition-colors ${
+            hasEdgeSelected
+              ? 'bg-green-600 hover:bg-green-700 text-white'
+              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+          }`}
+          title="Insert node between selected edge"
+        >
+          <Plus className="w-5 h-5" />
+        </button>
+
+        {/* Delete Button */}
+        <button
+          onClick={onDeleteSelected}
+          disabled={!hasSelection}
+          className={`p-3 rounded-l-lg shadow-lg transition-colors ${
+            hasSelection
+              ? 'bg-red-600 hover:bg-red-700 text-white'
+              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+          }`}
+          title="Delete selected items (Backspace/Delete)"
+        >
+          <Trash2 className="w-5 h-5" />
+        </button>
+
+        {/* Toggle Panel Button */}
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="bg-blue-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-blue-700 transition-colors"
+          title="Open Execution Panel"
+        >
+          <List className="w-5 h-5" />
+        </button>
+      </div>
 
       {/* Sidebar Panel */}
       <div

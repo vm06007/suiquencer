@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useEffect, useState } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
+import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Send, Plus, X, CheckCircle, XCircle, Loader2, AlertTriangle, ExternalLink, Info } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { SuinsClient } from '@mysten/suins';
@@ -8,7 +8,9 @@ import { SuiNSHelper } from '../SuiNSHelper';
 import type { NodeData } from '@/types';
 
 function TransferNode({ data, id }: NodeProps) {
-  const { setNodes, getNodes, getEdges } = useReactFlow();
+  const { setNodes } = useReactFlow();
+  const nodes = useNodes();
+  const edges = useEdges();
   const nodeData = data as NodeData;
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
@@ -33,9 +35,6 @@ function TransferNode({ data, id }: NodeProps) {
 
   // Calculate sequence number and cumulative amounts
   const { sequenceNumber, cumulativeAmount, totalAmount } = useMemo(() => {
-    const nodes = getNodes();
-    const edges = getEdges();
-
     // Find wallet node
     const walletNode = nodes.find(n => n.type === 'wallet');
     if (!walletNode) return { sequenceNumber: 0, cumulativeAmount: 0, totalAmount: 0 };
@@ -52,8 +51,9 @@ function TransferNode({ data, id }: NodeProps) {
       visited.add(nodeId);
 
       const node = nodes.find(n => n.id === nodeId);
-      if (!node || node.type === 'wallet' || node.type === 'selector') {
-        // Find outgoing edges and continue
+
+      // Skip wallet and selector nodes, but continue traversing through them
+      if (!node || node.type === 'wallet') {
         const outgoing = edges.filter(e => e.source === nodeId);
         for (const edge of outgoing) {
           const result = traverse(edge.target);
@@ -62,7 +62,17 @@ function TransferNode({ data, id }: NodeProps) {
         return null;
       }
 
-      // This is a valid sequence node (transfer)
+      // Skip selector nodes but continue through them
+      if (node.type === 'selector') {
+        const outgoing = edges.filter(e => e.source === nodeId);
+        for (const edge of outgoing) {
+          const result = traverse(edge.target);
+          if (result !== null) return result;
+        }
+        return null;
+      }
+
+      // This is a valid sequence node (transfer, swap, etc.)
       counter++;
       const amount = parseFloat(node.data.amount || '0');
 
@@ -88,7 +98,7 @@ function TransferNode({ data, id }: NodeProps) {
 
     traverse(walletNode.id);
     return { sequenceNumber: counter, cumulativeAmount: cumulative, totalAmount: total };
-  }, [id, getNodes, getEdges]);
+  }, [id, nodes, edges]);
 
   // Check balance validation
   const balanceWarning = useMemo(() => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -50,10 +50,69 @@ function FlowCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('smoothstep');
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Execution hook
   const { executeSequence, isExecuting, lastResult, clearResult } = useExecuteSequence();
+
+  // Handle inserting a node between two connected nodes
+  const handleInsertNode = useCallback(() => {
+    if (selectedEdges.length !== 1) return;
+
+    const selectedEdge = edges.find(e => e.id === selectedEdges[0]);
+    if (!selectedEdge) return;
+
+    const sourceNode = nodes.find(n => n.id === selectedEdge.source);
+    const targetNode = nodes.find(n => n.id === selectedEdge.target);
+    if (!sourceNode || !targetNode) return;
+
+    // Create new selector node positioned between source and target
+    const newNode: Node<NodeData> = {
+      id: `node-${nodeId++}`,
+      type: 'selector',
+      position: {
+        x: (sourceNode.position.x + targetNode.position.x) / 2,
+        y: (sourceNode.position.y + targetNode.position.y) / 2,
+      },
+      data: {
+        label: 'Select Action',
+        type: 'protocol',
+      },
+    };
+
+    // Add the new node
+    setNodes((nds) => [...nds, newNode]);
+
+    // Remove the old edge and create two new edges
+    setEdges((eds) => [
+      ...eds.filter(e => e.id !== selectedEdge.id),
+      {
+        id: `e${selectedEdge.source}-${newNode.id}`,
+        source: selectedEdge.source,
+        target: newNode.id,
+        type: edgeType,
+        animated: false,
+        style: { strokeWidth: 2, stroke: '#3b82f6' },
+      },
+      {
+        id: `e${newNode.id}-${selectedEdge.target}`,
+        source: newNode.id,
+        target: selectedEdge.target,
+        type: edgeType,
+        animated: true, // Dashed because target is selector
+        style: { strokeWidth: 2, stroke: '#3b82f6' },
+      },
+    ]);
+
+    setSelectedEdges([]);
+  }, [selectedEdges, edges, nodes, setNodes, setEdges, edgeType]);
+
+  // Handle edge selection to update style and add insert button
+  const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
+    const selectedEdgeIds = params.edges.map(e => e.id);
+    setSelectedEdges(selectedEdgeIds);
+  }, []);
 
   const handleExecute = useCallback(() => {
     // Get execution sequence
@@ -83,9 +142,56 @@ function FlowCanvas() {
     executeSequence(sequence);
   }, [nodes, edges, executeSequence]);
 
+  const handleDeleteSelected = useCallback(() => {
+    setEdges((eds) => eds.filter((edge) => !selectedEdges.includes(edge.id)));
+    setNodes((nds) => nds.filter((node) => !node.selected));
+    setSelectedEdges([]);
+  }, [selectedEdges, setEdges, setNodes]);
+
+  // Compute styled edges based on selection and node types
+  const styledEdges = useMemo(() => {
+    return edges.map((edge) => {
+      const targetNode = nodes.find(n => n.id === edge.target);
+      const isTargetSelector = targetNode?.type === 'selector';
+      const isSelected = selectedEdges.includes(edge.id);
+
+      return {
+        ...edge,
+        animated: isSelected || isTargetSelector,
+        style: {
+          strokeWidth: 2,
+          stroke: '#3b82f6',
+        },
+        label: isSelected ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleInsertNode();
+            }}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg transition-colors"
+            title="Insert node here"
+          >
+            +
+          </button>
+        ) : undefined,
+        labelStyle: isSelected ? { cursor: 'pointer' } : undefined,
+        labelBgStyle: isSelected ? { fill: 'transparent' } : undefined,
+      };
+    });
+  }, [edges, nodes, selectedEdges, handleInsertNode]);
+
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+    (params: Connection) => {
+      const targetNode = nodes.find(n => n.id === params.target);
+      const isTargetSelector = targetNode?.type === 'selector';
+
+      setEdges((eds) => addEdge({
+        ...params,
+        animated: isTargetSelector,
+        style: { strokeWidth: 2, stroke: '#3b82f6' },
+      }, eds));
+    },
+    [setEdges, nodes]
   );
 
   const handleToggleFullscreen = useCallback(() => {
@@ -131,11 +237,14 @@ function FlowCanvas() {
       setNodes((nds) => [...nds, newNode]);
 
       // Automatically connect the source to the new node
+      // Edge is animated (dashed) because target is a selector node
       const newEdge: Edge = {
         id: `e${sourceNodeId}-${newNode.id}`,
         source: sourceNodeId,
         target: newNode.id,
         type: edgeType,
+        animated: true, // Dashed until selector chooses an action
+        style: { strokeWidth: 2, stroke: '#3b82f6' },
       };
       setEdges((eds) => [...eds, newEdge]);
     };
@@ -155,15 +264,16 @@ function FlowCanvas() {
       <div className="w-full h-full pl-16">
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={styledEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onSelectionChange={handleSelectionChange}
           nodeTypes={nodeTypes}
           fitView
           defaultEdgeOptions={{
             type: edgeType,
-            animated: true,
+            animated: false,
             style: { strokeWidth: 2, stroke: '#3b82f6' },
           }}
         >
@@ -176,6 +286,10 @@ function FlowCanvas() {
         edges={edges}
         onExecute={handleExecute}
         isExecuting={isExecuting}
+        onDeleteSelected={handleDeleteSelected}
+        onInsertNode={handleInsertNode}
+        hasSelection={selectedEdges.length > 0 || nodes.some(n => n.selected)}
+        hasEdgeSelected={selectedEdges.length === 1}
       />
       <SuccessModal
         isOpen={!!lastResult}
