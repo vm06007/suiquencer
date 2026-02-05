@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@cetusprotocol/aggregator-sdk": "^1.4.4",
+    "@lifi/sdk": "^3.15.5",
     "@mysten/dapp-kit": "^0.14.29",
     "@mysten/sui": "^1.19.0",
     "@mysten/suins": "^0.6.1",

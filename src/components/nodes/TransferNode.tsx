@@ -93,7 +93,17 @@ function TransferNode({ data, id }: NodeProps) {
       // Skip wallet and selector nodes, but continue traversing through them
       if (!node || node.type === 'wallet') {
         const outgoing = edges.filter(e => e.source === nodeId);
-        for (const edge of outgoing) {
+        // Sort edges by target node position (Y first, then X) for consistent ordering
+        const sortedEdges = outgoing.sort((a, b) => {
+          const targetA = nodes.find(n => n.id === a.target);
+          const targetB = nodes.find(n => n.id === b.target);
+          if (!targetA || !targetB) return 0;
+          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
+            return targetA.position.y - targetB.position.y;
+          }
+          return targetA.position.x - targetB.position.x;
+        });
+        for (const edge of sortedEdges) {
           const result = traverse(edge.target);
           if (result !== null) return result;
         }
@@ -103,7 +113,17 @@ function TransferNode({ data, id }: NodeProps) {
       // Skip selector nodes but continue through them
       if (node.type === 'selector') {
         const outgoing = edges.filter(e => e.source === nodeId);
-        for (const edge of outgoing) {
+        // Sort edges by target node position for consistent ordering
+        const sortedEdges = outgoing.sort((a, b) => {
+          const targetA = nodes.find(n => n.id === a.target);
+          const targetB = nodes.find(n => n.id === b.target);
+          if (!targetA || !targetB) return 0;
+          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
+            return targetA.position.y - targetB.position.y;
+          }
+          return targetA.position.x - targetB.position.x;
+        });
+        for (const edge of sortedEdges) {
           const result = traverse(edge.target);
           if (result !== null) return result;
         }

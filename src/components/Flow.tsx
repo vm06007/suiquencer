@@ -15,6 +15,7 @@ import '@xyflow/react/dist/style.css';
 
 import WalletNode from './nodes/WalletNode';
 import TransferNode from './nodes/TransferNode';
+import SwapNode from './nodes/SwapNode';
 import SelectorNode from './nodes/SelectorNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
@@ -25,6 +26,7 @@ import type { NodeData } from '@/types';
 const nodeTypes: any = {
   wallet: WalletNode,
   transfer: TransferNode,
+  swap: SwapNode,
   selector: SelectorNode,
 };
 

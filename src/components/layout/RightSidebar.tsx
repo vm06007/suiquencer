@@ -153,6 +153,25 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                             </div>
                           </div>
                         )}
+                        {node.type === 'swap' && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-400">
+                              <span className="text-gray-500">Swap:</span>{' '}
+                              <span className="text-green-400 font-mono">
+                                {node.data.amount || '0'} {node.data.fromAsset || 'SUI'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400">
+                              <span className="text-gray-500">For:</span>{' '}
+                              <span className="text-blue-400 font-mono">
+                                ~{node.data.toAsset || 'USDC'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500 italic">
+                              Via Cetus Aggregator
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

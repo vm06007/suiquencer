@@ -3,6 +3,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@
 import { Transaction } from '@mysten/sui/transactions';
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
+import { AggregatorClient, Env } from '@cetusprotocol/aggregator-sdk';
 import { TOKENS } from '@/config/tokens';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '@/types';
@@ -35,6 +36,9 @@ export function useExecuteSequence() {
       try {
         // Create ONE transaction block for ALL operations (atomic)
         const tx = new Transaction();
+
+        // Set sender address (required for Cetus swap)
+        tx.setSender(account.address);
 
         console.log(`Building atomic transaction with ${sequence.length} operations...`);
 
@@ -75,6 +79,22 @@ export function useExecuteSequence() {
             }
 
             resolvedRecipients.set(i, resolvedAddress);
+          } else if (node.type === 'swap') {
+            const amount = parseFloat(node.data.amount || '0');
+            const fromAsset = node.data.fromAsset;
+            const toAsset = node.data.toAsset;
+
+            if (!fromAsset || !toAsset) {
+              throw new Error(`Step ${i + 1}: Both from and to assets are required`);
+            }
+
+            if (amount <= 0) {
+              throw new Error(`Step ${i + 1}: Amount must be greater than 0`);
+            }
+
+            if (fromAsset === toAsset) {
+              throw new Error(`Step ${i + 1}: Cannot swap between the same asset`);
+            }
           } else {
             throw new Error(`Step ${i + 1}: Node type "${node.type}" not yet implemented`);
           }
@@ -145,6 +165,88 @@ export function useExecuteSequence() {
 
               console.log(`Added step ${i + 1}: Transfer ${amount} ${asset} to ${recipientAddress.slice(0, 10)}...`);
             }
+          } else if (node.type === 'swap') {
+            const amount = parseFloat(node.data.amount || '0');
+            const fromAsset = node.data.fromAsset as keyof typeof TOKENS;
+            const toAsset = node.data.toAsset as keyof typeof TOKENS;
+            const fromToken = TOKENS[fromAsset];
+            const toToken = TOKENS[toAsset];
+
+            // Convert amount to smallest unit
+            const amountInSmallestUnit = Math.floor(amount * Math.pow(10, fromToken.decimals));
+
+            console.log(`Fetching swap route for ${amount} ${fromAsset} → ${toAsset}...`);
+
+            // Cetus Aggregator SDK: must pass { client, signer, env } for routerSwap (Pyth, etc.)
+            const aggregatorClient = new AggregatorClient({
+              client: suiClient,
+              signer: account.address,
+              env: Env.Mainnet,
+            });
+
+            const route = await aggregatorClient.findRouters({
+              from: fromToken.coinType,
+              target: toToken.coinType,
+              amount: amountInSmallestUnit.toString(),
+              byAmountIn: true,
+            });
+
+            if (!route || !route.amountOut || !route.packages?.get('aggregator_v3')) {
+              throw new Error(`Step ${i + 1}: No swap route found for ${fromAsset} → ${toAsset}`);
+            }
+
+            console.log(`Route found: ${route.paths.length} hop(s), estimated output: ${route.amountOut.toString()}`);
+
+            // Build input coin for the swap
+            let inputCoin;
+            if (fromAsset === 'SUI') {
+              [inputCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+            } else {
+              const coins = await suiClient.getCoins({
+                owner: account.address,
+                coinType: fromToken.coinType,
+              });
+
+              if (!coins.data || coins.data.length === 0) {
+                throw new Error(`Step ${i + 1}: No ${fromAsset} coins found in wallet`);
+              }
+
+              const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+              if (totalBalance < BigInt(amountInSmallestUnit)) {
+                throw new Error(`Step ${i + 1}: Insufficient ${fromAsset} balance`);
+              }
+
+              let remainingAmount = BigInt(amountInSmallestUnit);
+              const selectedCoins: string[] = [];
+              for (const coin of coins.data) {
+                if (remainingAmount <= 0) break;
+                selectedCoins.push(coin.coinObjectId);
+                remainingAmount -= BigInt(coin.balance);
+              }
+
+              if (selectedCoins.length > 1) {
+                const [primaryCoin, ...coinsToMerge] = selectedCoins;
+                tx.mergeCoins(
+                  tx.object(primaryCoin),
+                  coinsToMerge.map(coin => tx.object(coin))
+                );
+                [inputCoin] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
+              } else {
+                [inputCoin] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
+              }
+            }
+
+            // Use SDK routerSwap to build swap (handles all DEXes, Pyth, slippage)
+            const outputCoin = await aggregatorClient.routerSwap({
+              router: route,
+              inputCoin,
+              slippage: 0.02,
+              txb: tx,
+            });
+
+            tx.transferObjects([outputCoin], account.address);
+
+            console.log(`Added step ${i + 1}: Swap ${amount} ${fromAsset} → ${toAsset}`);
           }
         }
 
@@ -171,7 +273,7 @@ export function useExecuteSequence() {
         setIsExecuting(false);
       }
     },
-    [account, signAndExecuteTransaction]
+    [account, signAndExecuteTransaction, suiClient]
   );
 
   return {

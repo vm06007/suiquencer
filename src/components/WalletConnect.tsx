@@ -52,7 +52,8 @@ export function WalletConnect() {
   const formatAddress = (address: string) => {
     return `${address.slice(0, 10)}...${address.slice(-8)}`;
   };
-
+// they sort of overlap with CM hackathon and yes sounds good if I win lets see how much rewards going to be
+// but biggest reward for sure awaits you in BKK :P
   return (
     <div className="flex flex-col gap-2 w-full">
       {account ? (

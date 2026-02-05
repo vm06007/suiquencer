@@ -19,17 +19,21 @@ function SelectorNode({ data, id }: NodeProps) {
       nds.map((node) => {
         if (node.id === id) {
           // Change the node type based on selection
+          const nodeType = protocol === 'transfer' ? 'transfer' : protocol === 'swap' ? 'swap' : 'protocol';
+
           return {
             ...node,
-            type: protocol === 'transfer' ? 'transfer' : 'protocol',
+            type: nodeType,
             data: {
               ...node.data,
               protocol,
               label: protocol.charAt(0).toUpperCase() + protocol.slice(1),
               // Initialize with defaults
-              asset: 'SUI',
+              asset: protocol === 'transfer' ? 'SUI' : undefined,
               amount: '',
-              recipientAddress: '',
+              recipientAddress: protocol === 'transfer' ? '' : undefined,
+              fromAsset: protocol === 'swap' ? 'SUI' : undefined,
+              toAsset: protocol === 'swap' ? 'USDC' : undefined,
             },
           };
         }

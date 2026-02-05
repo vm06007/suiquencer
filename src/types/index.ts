@@ -13,4 +13,7 @@ export interface NodeData extends Record<string, unknown> {
   recipientAddress?: string;
   amount?: string;
   asset?: string;
+  // Swap specific
+  fromAsset?: string;
+  toAsset?: string;
 }
