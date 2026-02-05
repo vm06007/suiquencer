@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
-import { useCurrentAccount, useSignAndExecuteTransaction } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
+import { SuinsClient } from '@mysten/suins';
+import { isValidSuiNSName } from '@mysten/sui/utils';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '@/types';
 
@@ -9,6 +11,11 @@ export function useExecuteSequence() {
   const [lastResult, setLastResult] = useState<{ digest: string; stepCount: number } | null>(null);
   const account = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
+  const suiClient = useSuiClient();
+  const suinsClient = new SuinsClient({
+    client: suiClient,
+    network: 'mainnet'
+  });
 
   const executeSequence = useCallback(
     async (sequence: Node<NodeData>[]) => {
@@ -30,21 +37,43 @@ export function useExecuteSequence() {
 
         console.log(`Building atomic transaction with ${sequence.length} operations...`);
 
-        // Validate all steps first
+        // Resolve SuiNS names and validate all steps first
+        const resolvedRecipients: Map<number, string> = new Map();
+
         for (let i = 0; i < sequence.length; i++) {
           const node = sequence[i];
 
           if (node.type === 'transfer') {
             const amount = parseFloat(node.data.amount || '0');
-            const recipientAddress = node.data.recipientAddress;
+            const recipientInput = node.data.recipientAddress;
 
-            if (!recipientAddress) {
+            if (!recipientInput) {
               throw new Error(`Step ${i + 1}: Recipient address is required`);
             }
 
             if (amount <= 0) {
               throw new Error(`Step ${i + 1}: Amount must be greater than 0`);
             }
+
+            // Resolve SuiNS name if it's a valid SuiNS format
+            let resolvedAddress = recipientInput;
+
+            if (isValidSuiNSName(recipientInput)) {
+              console.log(`Resolving SuiNS name: ${recipientInput}`);
+              try {
+                // Pass the name directly - the client handles both @ and .sui formats
+                const nameRecord = await suinsClient.getNameRecord(recipientInput);
+                if (!nameRecord || !nameRecord.targetAddress) {
+                  throw new Error(`Step ${i + 1}: Failed to resolve SuiNS name "${recipientInput}"`);
+                }
+                resolvedAddress = nameRecord.targetAddress;
+                console.log(`Resolved ${recipientInput} to ${resolvedAddress}`);
+              } catch (error) {
+                throw new Error(`Step ${i + 1}: Failed to resolve SuiNS name "${recipientInput}"`);
+              }
+            }
+
+            resolvedRecipients.set(i, resolvedAddress);
           } else {
             throw new Error(`Step ${i + 1}: Node type "${node.type}" not yet implemented`);
           }
@@ -56,7 +85,7 @@ export function useExecuteSequence() {
 
           if (node.type === 'transfer') {
             const amount = parseFloat(node.data.amount || '0');
-            const recipientAddress = node.data.recipientAddress!;
+            const recipientAddress = resolvedRecipients.get(i)!;
 
             // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
             const amountInMist = Math.floor(amount * 1_000_000_000);

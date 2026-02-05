@@ -14,9 +14,13 @@ export function SuccessModal({ isOpen, onClose, digest, stepCount, network = 'ma
 
   if (!isOpen) return null;
 
-  const explorerUrl = network === 'mainnet'
+  const suiscanUrl = network === 'mainnet'
     ? `https://suiscan.xyz/mainnet/tx/${digest}`
     : `https://suiscan.xyz/${network}/tx/${digest}`;
+
+  const suivisionUrl = network === 'mainnet'
+    ? `https://suivision.xyz/txblock/${digest}`
+    : `https://suivision.xyz/txblock/${digest}?network=${network}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(digest);
@@ -84,16 +88,30 @@ export function SuccessModal({ isOpen, onClose, digest, stepCount, network = 'ma
             </div>
           </div>
 
-          {/* Explorer Link */}
-          <a
-            href={explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-          >
-            <span>View on SuiScan</span>
-            <ExternalLink className="w-4 h-4" />
-          </a>
+          {/* Explorer Links */}
+          <div className="space-y-2">
+            <p className="text-xs text-gray-600 text-center mb-2">View transaction on:</p>
+            <div className="grid grid-cols-2 gap-2">
+              <a
+                href={suiscanUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white py-2.5 rounded-lg font-semibold hover:from-blue-700 hover:to-blue-800 transition-all shadow-md hover:shadow-lg text-sm"
+              >
+                <span>SuiScan</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <a
+                href={suivisionUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2.5 rounded-lg font-semibold hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg text-sm"
+              >
+                <span>SuiVision</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
 
           {/* Network Badge */}
           <div className="mt-4 text-center">
