@@ -22,6 +22,8 @@ import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
 import { useExecuteSequence } from '@/hooks/useExecuteSequence';
 import { useTheme } from '@/hooks/useTheme';
+import { useFlowWorkspace } from '@/hooks/useFlowWorkspace';
+import { useFlowFileOperations } from '@/hooks/useFlowFileOperations';
 import type { NodeData } from '@/types';
 
 const nodeTypes: any = {
@@ -31,7 +33,7 @@ const nodeTypes: any = {
   selector: SelectorNode,
 };
 
-// Initial wallet node
+// Initial wallet node (not deletable)
 const initialNodes: Node<NodeData>[] = [
   {
     id: 'wallet-1',
@@ -41,16 +43,63 @@ const initialNodes: Node<NodeData>[] = [
       label: 'Your Wallet',
       type: 'wallet',
     },
+    deletable: false,
   },
 ];
 
 const initialEdges: Edge[] = [];
 
 let nodeId = 2;
+let tabId = 2;
+
+// Helper function to get initial workspace from localStorage or defaults
+function getInitialWorkspace() {
+  const WORKSPACE_STORAGE_KEY = 'suiquencer-workspace';
+
+  // Try to restore from localStorage
+  try {
+    const saved = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (saved) {
+      const workspace = JSON.parse(saved);
+      if (workspace.tabs && workspace.tabs.length > 0) {
+        const activeTab =
+          workspace.tabs.find((t: any) => t.id === workspace.activeTabId) ||
+          workspace.tabs[0];
+        console.log('Workspace restored from localStorage');
+        return {
+          tabs: workspace.tabs,
+          activeTabId: workspace.activeTabId || workspace.tabs[0].id,
+          nodes: activeTab.nodes,
+          edges: activeTab.edges,
+        };
+      }
+    }
+  } catch (error) {
+    console.error('Failed to restore workspace from localStorage:', error);
+  }
+
+  // Return default state
+  return {
+    tabs: [
+      {
+        id: '1',
+        name: 'My Sequence #1',
+        nodes: initialNodes,
+        edges: initialEdges,
+      },
+    ],
+    activeTabId: '1',
+    nodes: initialNodes,
+    edges: initialEdges,
+  };
+}
 
 function FlowCanvas() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  // Use useState with lazy initializer to only call getInitialWorkspace() once on mount
+  const [initialWorkspace] = useState(() => getInitialWorkspace());
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialWorkspace.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialWorkspace.edges);
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('smoothstep');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
@@ -60,15 +109,60 @@ function FlowCanvas() {
   const { theme, toggleTheme } = useTheme();
   const { executeSequence, isExecuting, lastResult, clearResult } = useExecuteSequence();
 
+  // Workspace and file operations hooks
+  const workspace = useFlowWorkspace(
+    {
+      initialTabs: initialWorkspace.tabs,
+      initialActiveTabId: initialWorkspace.activeTabId,
+    },
+    nodes,
+    edges,
+    setNodes,
+    setEdges
+  );
+
+  const fileOps = useFlowFileOperations(
+    nodes,
+    edges,
+    workspace.tabs,
+    workspace.activeTabId,
+    workspace.setTabs,
+    workspace.setActiveTabId,
+    setNodes,
+    setEdges,
+    () => `${tabId++}`
+  );
+
+  // Handle saving to localStorage
+  const handleSave = useCallback(() => {
+    workspace.saveWorkspaceToLocalStorage();
+    workspace.setHasUnsavedChanges(false);
+    console.log('Workflow saved to memory');
+  }, [workspace]);
+
+  // Handle creating a new tab
+  const handleNewTab = useCallback(() => {
+    const newTab = {
+      id: `${tabId++}`,
+      name: `My Sequence #${workspace.tabs.length + 1}`,
+      nodes: initialNodes,
+      edges: initialEdges,
+    };
+    workspace.setTabs((prev) => [...prev, newTab]);
+    workspace.setActiveTabId(newTab.id);
+    setNodes(newTab.nodes);
+    setEdges(newTab.edges);
+  }, [workspace, setNodes, setEdges]);
+
   // Handle inserting a node (either between edges or after a selected node)
   const handleInsertNode = useCallback(() => {
     // Case 1: Edge is selected - insert node between two connected nodes
     if (selectedEdges.length === 1) {
-      const selectedEdge = edges.find(e => e.id === selectedEdges[0]);
+      const selectedEdge = edges.find((e) => e.id === selectedEdges[0]);
       if (!selectedEdge) return;
 
-      const sourceNode = nodes.find(n => n.id === selectedEdge.source);
-      const targetNode = nodes.find(n => n.id === selectedEdge.target);
+      const sourceNode = nodes.find((n) => n.id === selectedEdge.source);
+      const targetNode = nodes.find((n) => n.id === selectedEdge.target);
       if (!sourceNode || !targetNode) return;
 
       // Create new selector node positioned between source and target
@@ -90,7 +184,7 @@ function FlowCanvas() {
 
       // Remove the old edge and create two new edges
       setEdges((eds) => [
-        ...eds.filter(e => e.id !== selectedEdge.id),
+        ...eds.filter((e) => e.id !== selectedEdge.id),
         {
           id: `e${selectedEdge.source}-${newNode.id}`,
           source: selectedEdge.source,
@@ -115,7 +209,7 @@ function FlowCanvas() {
 
     // Case 2: Node is selected - add new node after it
     if (selectedNodes.length === 1) {
-      const sourceNode = nodes.find(n => n.id === selectedNodes[0]);
+      const sourceNode = nodes.find((n) => n.id === selectedNodes[0]);
       if (!sourceNode) return;
 
       // Create new selector node positioned to the right of the source
@@ -151,16 +245,19 @@ function FlowCanvas() {
   }, [selectedEdges, selectedNodes, edges, nodes, setNodes, setEdges, edgeType]);
 
   // Handle selection changes
-  const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
-    const selectedEdgeIds = params.edges.map(e => e.id);
-    const selectedNodeIds = params.nodes.map(n => n.id);
-    setSelectedEdges(selectedEdgeIds);
-    setSelectedNodes(selectedNodeIds);
-  }, []);
+  const handleSelectionChange = useCallback(
+    (params: { nodes: Node[]; edges: Edge[] }) => {
+      const selectedEdgeIds = params.edges.map((e) => e.id);
+      const selectedNodeIds = params.nodes.map((n) => n.id);
+      setSelectedEdges(selectedEdgeIds);
+      setSelectedNodes(selectedNodeIds);
+    },
+    []
+  );
 
   const handleExecute = useCallback(() => {
     // Get execution sequence
-    const walletNode = nodes.find(n => n.type === 'wallet');
+    const walletNode = nodes.find((n) => n.type === 'wallet');
     if (!walletNode) return;
 
     const sequence: Node<NodeData>[] = [];
@@ -170,32 +267,42 @@ function FlowCanvas() {
       if (visited.has(nodeId)) return;
       visited.add(nodeId);
 
-      const node = nodes.find(n => n.id === nodeId);
+      const node = nodes.find((n) => n.id === nodeId);
       if (!node || node.type === 'wallet') return;
       if (node.type === 'selector') return;
 
-      sequence.push(node);
+      sequence.push(node as Node<NodeData>);
 
-      const outgoingEdges = edges.filter(e => e.source === nodeId);
-      outgoingEdges.forEach(edge => traverse(edge.target));
+      const outgoingEdges = edges.filter((e) => e.source === nodeId);
+      outgoingEdges.forEach((edge) => traverse(edge.target));
     };
 
-    const startEdges = edges.filter(e => e.source === walletNode.id);
-    startEdges.forEach(edge => traverse(edge.target));
+    const startEdges = edges.filter((e) => e.source === walletNode.id);
+    startEdges.forEach((edge) => traverse(edge.target));
 
     executeSequence(sequence);
   }, [nodes, edges, executeSequence]);
 
   const handleDeleteSelected = useCallback(() => {
     setEdges((eds) => eds.filter((edge) => !selectedEdges.includes(edge.id)));
-    setNodes((nds) => nds.filter((node) => !node.selected));
+    setNodes((nds) =>
+      nds.filter((node) => !node.selected || node.type === 'wallet')
+    );
     setSelectedEdges([]);
   }, [selectedEdges, setEdges, setNodes]);
+
+  const canDelete = useMemo(() => {
+    if (selectedEdges.length > 0) return true;
+    const hasDeletableNode = selectedNodes.some(
+      (id) => nodes.find((n) => n.id === id)?.type !== 'wallet'
+    );
+    return hasDeletableNode;
+  }, [selectedEdges.length, selectedNodes, nodes]);
 
   // Compute styled edges based on selection and node types
   const styledEdges = useMemo(() => {
     return edges.map((edge) => {
-      const targetNode = nodes.find(n => n.id === edge.target);
+      const targetNode = nodes.find((n) => n.id === edge.target);
       const isTargetSelector = targetNode?.type === 'selector';
       const isSelected = selectedEdges.includes(edge.id);
 
@@ -226,15 +333,20 @@ function FlowCanvas() {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const targetNode = nodes.find(n => n.id === params.target);
+      const targetNode = nodes.find((n) => n.id === params.target);
       const isTargetSelector = targetNode?.type === 'selector';
 
       // Add the edge
-      setEdges((eds) => addEdge({
-        ...params,
-        animated: isTargetSelector,
-        style: { strokeWidth: 2, stroke: '#3b82f6' },
-      }, eds));
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            animated: isTargetSelector,
+            style: { strokeWidth: 2, stroke: '#3b82f6' },
+          },
+          eds
+        )
+      );
 
       // Auto-prefill transfer node when connecting from swap
       if (targetNode?.type === 'transfer' && params.source) {
@@ -243,7 +355,9 @@ function FlowCanvas() {
 
           // Get all incoming sources to this target
           const incomingSourceIds = new Set(
-            newEdges.filter((e) => e.target === params.target).map((e) => e.source)
+            newEdges
+              .filter((e) => e.target === params.target)
+              .map((e) => e.source)
           );
 
           // Calculate total estimated output by symbol
@@ -290,7 +404,11 @@ function FlowCanvas() {
           const splitCount = targetTransferIds.size || 1;
           const splitAmount = total / splitCount;
           const amountStr =
-            splitAmount <= 0 ? '0' : splitAmount < 0.0001 ? splitAmount.toExponential(2) : splitAmount.toFixed(6);
+            splitAmount <= 0
+              ? '0'
+              : splitAmount < 0.0001
+                ? splitAmount.toExponential(2)
+                : splitAmount.toFixed(6);
 
           // Update all connected transfer nodes with the split amount
           return nds.map((n) =>
@@ -322,10 +440,13 @@ function FlowCanvas() {
     }
   }, []);
 
-  const handleEdgeTypeChange = useCallback((type: 'default' | 'straight' | 'step' | 'smoothstep') => {
-    setEdgeType(type);
-    setEdges((eds) => eds.map((e) => ({ ...e, type })));
-  }, [setEdges]);
+  const handleEdgeTypeChange = useCallback(
+    (type: 'default' | 'straight' | 'step' | 'smoothstep') => {
+      setEdgeType(type);
+      setEdges((eds) => eds.map((e) => ({ ...e, type })));
+    },
+    [setEdges]
+  );
 
   // Listen for custom addNode events from nodes
   useEffect(() => {
@@ -372,7 +493,10 @@ function FlowCanvas() {
   }, [nodes, setNodes, setEdges, edgeType]);
 
   return (
-    <div ref={containerRef} className="w-full h-screen bg-gray-50 dark:bg-gray-950">
+    <div
+      ref={containerRef}
+      className="w-full h-screen bg-gray-50 dark:bg-gray-950"
+    >
       <Sidebar
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
@@ -380,41 +504,51 @@ function FlowCanvas() {
         onEdgeTypeChange={handleEdgeTypeChange}
         isDark={theme === 'dark'}
         onToggleTheme={toggleTheme}
+        onSave={handleSave}
+        onLoad={fileOps.handleLoad}
+        onExport={fileOps.handleExport}
+        tabs={workspace.tabs}
+        activeTabId={workspace.activeTabId}
+        onTabChange={workspace.handleTabChange}
+        onTabClose={workspace.handleTabClose}
+        onTabAdd={handleNewTab}
       />
       <div className="w-full h-full pl-16">
-        <ReactFlow
-          nodes={nodes}
-          edges={styledEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onSelectionChange={handleSelectionChange}
-          nodeTypes={nodeTypes}
-          fitView
-          defaultEdgeOptions={{
-            type: edgeType,
-            animated: false,
-            style: { strokeWidth: 2, stroke: '#3b82f6' },
-          }}
-        >
-          <Background
-            gap={16}
-            size={1}
-            color={theme === 'dark' ? '#ffffff' : '#d1d5db'}
-            style={{ backgroundColor: theme === 'dark' ? '#030712' : '#f9fafb' }}
-          />
-          <Controls />
-        </ReactFlow>
+        <div className="w-full h-full">
+          <ReactFlow
+            nodes={nodes}
+            edges={styledEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onSelectionChange={handleSelectionChange}
+            nodeTypes={nodeTypes}
+            fitView
+            defaultEdgeOptions={{
+              type: edgeType,
+              animated: false,
+              style: { strokeWidth: 2, stroke: '#3b82f6' },
+            }}
+          >
+            <Background
+              gap={16}
+              size={1}
+              color={theme === 'dark' ? '#ffffff' : '#d1d5db'}
+              style={{ backgroundColor: theme === 'dark' ? '#030712' : '#f9fafb' }}
+            />
+            <Controls />
+          </ReactFlow>
+        </div>
       </div>
       <RightSidebar
-        nodes={nodes}
+        nodes={nodes as Node<NodeData>[]}
         edges={edges}
         onExecute={handleExecute}
         isExecuting={isExecuting}
         onDeleteSelected={handleDeleteSelected}
         onInsertNode={handleInsertNode}
-        hasSelection={selectedEdges.length > 0 || selectedNodes.length > 0}
         canInsert={selectedEdges.length === 1 || selectedNodes.length === 1}
+        canDelete={canDelete}
       />
       <SuccessModal
         isOpen={!!lastResult}

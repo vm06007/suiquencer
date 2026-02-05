@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useEffect, useState } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
-import { Send, Plus, X, CheckCircle, XCircle, Loader2, AlertTriangle, ExternalLink, Info } from 'lucide-react';
+import { Send, X, CheckCircle, XCircle, Loader2, AlertTriangle, ExternalLink, Info } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
@@ -285,7 +285,7 @@ function TransferNode({ data, id }: NodeProps) {
   }, [id, setNodes]);
 
   return (
-    <div className="bg-white border-2 border-green-500 rounded-lg shadow-lg min-w-[280px]">
+    <div className="bg-white dark:bg-gray-800 border-2 border-green-500 rounded-lg shadow-lg min-w-[280px]">
       <div className="bg-green-500 px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Send className="w-4 h-4 text-white" />
@@ -305,11 +305,11 @@ function TransferNode({ data, id }: NodeProps) {
       <div className="p-4 space-y-3">
         {/* Asset Selection */}
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Asset</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">Asset</label>
           <select
             value={nodeData.asset || 'SUI'}
             onChange={(e) => updateNodeData({ asset: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
+            className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:border-green-500"
           >
             <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
@@ -319,18 +319,18 @@ function TransferNode({ data, id }: NodeProps) {
 
         {/* Amount Input */}
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Amount</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">Amount</label>
           <input
             type="text"
             value={nodeData.amount || ''}
             onChange={(e) => updateNodeData({ amount: e.target.value, amountManuallyEdited: true })}
             placeholder="0.0"
-            className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none ${
+            className={`w-full px-2 py-1.5 border rounded text-sm bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none ${
               balanceWarning?.type === 'error'
-                ? 'border-red-500 focus:border-red-600'
+                ? 'border-red-500 dark:border-red-600 focus:border-red-600'
                 : balanceWarning?.type === 'warning'
-                ? 'border-yellow-500 focus:border-yellow-600'
-                : 'border-gray-300 focus:border-green-500'
+                ? 'border-yellow-500 dark:border-yellow-600 focus:border-yellow-600'
+                : 'border-gray-300 dark:border-gray-600 focus:border-green-500'
             }`}
           />
           {balanceWarning && (
@@ -347,18 +347,18 @@ function TransferNode({ data, id }: NodeProps) {
 
         {/* Recipient Address */}
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">To Address</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">To Address</label>
           <input
             type="text"
             value={nodeData.recipientAddress || ''}
             onChange={(e) => updateNodeData({ recipientAddress: e.target.value })}
             placeholder="0x..., name.sui, or @name"
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm font-mono focus:outline-none focus:border-green-500"
+            className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-sm font-mono bg-white dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:border-green-500"
           />
           {nodeData.recipientAddress && isValidSuiNSName(nodeData.recipientAddress) && (
             <div className="mt-1">
               {suinsValidation.isValidating && (
-                <div className="flex items-center gap-1 text-xs text-gray-600">
+                <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   <span>Resolving SuiNS name...</span>
                 </div>
@@ -369,13 +369,13 @@ function TransferNode({ data, id }: NodeProps) {
                     <CheckCircle className="w-3 h-3" />
                     <span>Valid SuiNS name</span>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-600 font-mono bg-gray-50 rounded p-1">
+                  <div className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-700 rounded p-1">
                     <span className="flex-1 truncate">
                       → {suinsValidation.resolvedAddress.slice(0, 7)}...{suinsValidation.resolvedAddress.slice(-5)}
                     </span>
                     <div className="flex items-center gap-0.5">
                       <div className="group relative">
-                        <Info className="w-3 h-3 text-gray-400 hover:text-gray-600 cursor-help" />
+                        <Info className="w-3 h-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
                         <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-10">
                           {suinsValidation.resolvedAddress}
                         </div>
@@ -411,34 +411,12 @@ function TransferNode({ data, id }: NodeProps) {
         </div>
       </div>
 
-      {/* Handles */}
+      {/* Input handle only - transfer is terminal (no outgoing edge) */}
       <Handle
         type="target"
         position={Position.Left}
         className="!bg-green-500 !w-3 !h-3"
       />
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!bg-green-500 !w-3 !h-3"
-      />
-
-      {/* Add Sequence button */}
-      <div className="border-t border-gray-200 p-2 flex justify-center">
-        <button
-          className="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 hover:bg-green-50 px-3 py-1 rounded transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            const event = new CustomEvent('addNode', {
-              detail: { sourceNodeId: id }
-            });
-            window.dispatchEvent(event);
-          }}
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Sequence</span>
-        </button>
-      </div>
     </div>
   );
 }

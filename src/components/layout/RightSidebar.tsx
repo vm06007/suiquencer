@@ -10,11 +10,11 @@ interface RightSidebarProps {
   isExecuting: boolean;
   onDeleteSelected: () => void;
   onInsertNode: () => void;
-  hasSelection: boolean;
   canInsert: boolean;
+  canDelete: boolean;
 }
 
-export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, hasSelection, canInsert }: RightSidebarProps) {
+export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, canInsert, canDelete }: RightSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Get execution sequence by following edges from wallet node
@@ -71,13 +71,13 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
         {/* Delete Button */}
         <button
           onClick={onDeleteSelected}
-          disabled={!hasSelection}
+          disabled={!canDelete}
           className={`p-3 rounded-l-lg shadow-lg transition-colors ${
-            hasSelection
+            canDelete
               ? 'bg-red-600 hover:bg-red-700 text-white'
               : 'bg-gray-300 text-gray-500 dark:bg-gray-400 dark:text-gray-200 cursor-not-allowed'
           }`}
-          title="Delete selected items (Backspace/Delete)"
+          title={canDelete ? 'Delete selected items (Backspace/Delete)' : 'Select edges or non-wallet nodes to delete'}
         >
           <Trash2 className="w-5 h-5" />
         </button>
