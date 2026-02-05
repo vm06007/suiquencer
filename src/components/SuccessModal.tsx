@@ -1,0 +1,108 @@
+import { CheckCircle2, ExternalLink, X, Copy } from 'lucide-react';
+import { useState } from 'react';
+
+interface SuccessModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  digest: string;
+  stepCount: number;
+  network?: 'mainnet' | 'testnet' | 'devnet';
+}
+
+export function SuccessModal({ isOpen, onClose, digest, stepCount, network = 'mainnet' }: SuccessModalProps) {
+  const [copied, setCopied] = useState(false);
+
+  if (!isOpen) return null;
+
+  const explorerUrl = network === 'mainnet'
+    ? `https://suiscan.xyz/mainnet/tx/${digest}`
+    : `https://suiscan.xyz/${network}/tx/${digest}`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(digest);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      {/* Overlay */}
+      <div
+        className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4"
+        onClick={onClose}
+      >
+        {/* Modal */}
+        <div
+          className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 relative"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          {/* Success Icon */}
+          <div className="flex justify-center mb-4">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+              <CheckCircle2 className="w-10 h-10 text-green-600" />
+            </div>
+          </div>
+
+          {/* Title */}
+          <h2 className="text-2xl font-bold text-gray-900 text-center mb-2">
+            Transaction Successful!
+          </h2>
+
+          {/* Subtitle */}
+          <p className="text-gray-600 text-center mb-6">
+            All {stepCount} operation{stepCount !== 1 ? 's' : ''} executed in one atomic transaction
+          </p>
+
+          {/* Transaction Hash */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Transaction Hash</span>
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                {copied ? (
+                  <span className="text-green-600">Copied!</span>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="font-mono text-xs text-gray-900 break-all bg-white rounded p-2 border border-gray-200">
+              {digest}
+            </div>
+          </div>
+
+          {/* Explorer Link */}
+          <a
+            href={explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
+          >
+            <span>View on SuiScan</span>
+            <ExternalLink className="w-4 h-4" />
+          </a>
+
+          {/* Network Badge */}
+          <div className="mt-4 text-center">
+            <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+              {network.charAt(0).toUpperCase() + network.slice(1)} Network
+            </span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

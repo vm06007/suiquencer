@@ -18,6 +18,7 @@ import TransferNode from './nodes/TransferNode';
 import SelectorNode from './nodes/SelectorNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
+import { SuccessModal } from './SuccessModal';
 import { useExecuteSequence } from '@/hooks/useExecuteSequence';
 import type { NodeData } from '@/types';
 
@@ -52,7 +53,7 @@ function FlowCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Execution hook
-  const { executeSequence, isExecuting } = useExecuteSequence();
+  const { executeSequence, isExecuting, lastResult, clearResult } = useExecuteSequence();
 
   const handleExecute = useCallback(() => {
     // Get execution sequence
@@ -175,6 +176,13 @@ function FlowCanvas() {
         edges={edges}
         onExecute={handleExecute}
         isExecuting={isExecuting}
+      />
+      <SuccessModal
+        isOpen={!!lastResult}
+        onClose={clearResult}
+        digest={lastResult?.digest || ''}
+        stepCount={lastResult?.stepCount || 0}
+        network="mainnet"
       />
     </div>
   );

@@ -6,6 +6,7 @@ import type { NodeData } from '@/types';
 
 export function useExecuteSequence() {
   const [isExecuting, setIsExecuting] = useState(false);
+  const [lastResult, setLastResult] = useState<{ digest: string; stepCount: number } | null>(null);
   const account = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
 
@@ -75,10 +76,18 @@ export function useExecuteSequence() {
         });
 
         console.log('Atomic transaction executed successfully:', result);
-        alert(`All ${sequence.length} operations executed successfully in one atomic transaction! ✅\n\nDigest: ${result.digest.slice(0, 20)}...`);
+
+        // Store the result for the modal
+        setLastResult({
+          digest: result.digest,
+          stepCount: sequence.length,
+        });
+
+        return result;
       } catch (error: any) {
         console.error('Execution failed:', error);
         alert(`Execution failed: ${error.message || 'Unknown error'}`);
+        throw error;
       } finally {
         setIsExecuting(false);
       }
@@ -89,5 +98,7 @@ export function useExecuteSequence() {
   return {
     executeSequence,
     isExecuting,
+    lastResult,
+    clearResult: () => setLastResult(null),
   };
 }
