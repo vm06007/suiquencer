@@ -43,7 +43,7 @@ function WalletNode({ data, id }: NodeProps) {
           }}
         >
           <Plus className="w-4 h-4" />
-          <span>Add Node</span>
+          <span>Add Sequence</span>
         </button>
       </div>
     </div>

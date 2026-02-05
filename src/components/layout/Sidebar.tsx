@@ -1,4 +1,5 @@
 import { Maximize2, Minimize2, GitBranch } from 'lucide-react';
+import { useState } from 'react';
 
 interface SidebarProps {
   isFullscreen: boolean;
@@ -13,6 +14,7 @@ export function Sidebar({
   edgeType,
   onEdgeTypeChange,
 }: SidebarProps) {
+  const [showEdgeMenu, setShowEdgeMenu] = useState(false);
   return (
     <div className="fixed left-0 top-0 h-screen w-16 bg-gray-900 border-r border-gray-700 flex flex-col items-center py-4 gap-4 z-50">
       {/* Logo */}
@@ -28,8 +30,9 @@ export function Sidebar({
       {/* Tools */}
       <div className="flex flex-col gap-2">
         {/* Edge Style Selector */}
-        <div className="relative group">
+        <div className="relative">
           <button
+            onClick={() => setShowEdgeMenu(!showEdgeMenu)}
             className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
             title={`Edge Style: ${edgeType}`}
           >
@@ -37,22 +40,27 @@ export function Sidebar({
           </button>
 
           {/* Dropdown menu */}
-          <div className="absolute left-full ml-2 top-0 hidden group-hover:block bg-gray-800 rounded-lg shadow-lg p-2 min-w-[140px]">
-            <div className="text-xs text-gray-400 mb-2 px-2">Edge Style</div>
-            {['default', 'straight', 'step', 'smoothstep'].map((type) => (
-              <button
-                key={type}
-                onClick={() => onEdgeTypeChange(type as any)}
-                className={`w-full text-left px-3 py-2 rounded text-sm capitalize transition-colors ${
-                  edgeType === type
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-700'
-                }`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
+          {showEdgeMenu && (
+            <div className="absolute left-full ml-2 top-0 bg-gray-800 rounded-lg shadow-lg p-2 min-w-[140px]">
+              <div className="text-xs text-gray-400 mb-2 px-2">Edge Style</div>
+              {['default', 'straight', 'step', 'smoothstep'].map((type) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    onEdgeTypeChange(type as any);
+                    setShowEdgeMenu(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 rounded text-sm capitalize transition-colors ${
+                    edgeType === type
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-300 hover:bg-gray-700'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Fullscreen Toggle */}

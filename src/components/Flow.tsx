@@ -14,11 +14,15 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import WalletNode from './nodes/WalletNode';
+import TransferNode from './nodes/TransferNode';
+import SelectorNode from './nodes/SelectorNode';
 import { Sidebar } from './layout/Sidebar';
 import type { NodeData } from '@/types';
 
 const nodeTypes: any = {
   wallet: WalletNode,
+  transfer: TransferNode,
+  selector: SelectorNode,
 };
 
 // Initial wallet node
@@ -41,7 +45,7 @@ let nodeId = 2;
 function FlowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('default');
+  const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('smoothstep');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +69,7 @@ function FlowCanvas() {
     setEdges((eds) => eds.map((e) => ({ ...e, type })));
   }, [setEdges]);
 
-  // Listen for custom addNode events from the WalletNode component
+  // Listen for custom addNode events from nodes
   useEffect(() => {
     const handleAddNode = (event: Event) => {
       const customEvent = event as CustomEvent;
@@ -75,17 +79,17 @@ function FlowCanvas() {
       const sourceNode = nodes.find((n) => n.id === sourceNodeId);
       if (!sourceNode) return;
 
-      // Create a new wallet node to the right of the source
+      // Create a new selector node to the right of the source
       const newNode: Node<NodeData> = {
-        id: `wallet-${nodeId++}`,
-        type: 'wallet',
+        id: `node-${nodeId++}`,
+        type: 'selector',
         position: {
-          x: sourceNode.position.x + 300,
+          x: sourceNode.position.x + 350,
           y: sourceNode.position.y,
         },
         data: {
-          label: `Wallet ${nodeId - 1}`,
-          type: 'wallet',
+          label: 'Select Action',
+          type: 'protocol',
         },
       };
 
