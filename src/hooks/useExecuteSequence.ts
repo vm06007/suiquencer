@@ -3,6 +3,7 @@ import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@
 import { Transaction } from '@mysten/sui/transactions';
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
+import { TOKENS } from '@/config/tokens';
 import type { Node } from '@xyflow/react';
 import type { NodeData } from '@/types';
 
@@ -86,15 +87,64 @@ export function useExecuteSequence() {
           if (node.type === 'transfer') {
             const amount = parseFloat(node.data.amount || '0');
             const recipientAddress = resolvedRecipients.get(i)!;
+            const asset = (node.data.asset || 'SUI') as keyof typeof TOKENS;
+            const tokenInfo = TOKENS[asset];
 
-            // Convert SUI to MIST (1 SUI = 1,000,000,000 MIST)
-            const amountInMist = Math.floor(amount * 1_000_000_000);
+            // Convert amount to smallest unit based on token decimals
+            const amountInSmallestUnit = Math.floor(amount * Math.pow(10, tokenInfo.decimals));
 
-            // Split coins and transfer in the same transaction block
-            const [coin] = tx.splitCoins(tx.gas, [amountInMist]);
-            tx.transferObjects([coin], recipientAddress);
+            if (asset === 'SUI') {
+              // For SUI, use gas coins
+              const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+              tx.transferObjects([coin], recipientAddress);
+              console.log(`Added step ${i + 1}: Transfer ${amount} ${asset} to ${recipientAddress.slice(0, 10)}...`);
+            } else {
+              // For USDC/USDT, select coins from the user's wallet
+              console.log(`Fetching ${asset} coins for transfer...`);
 
-            console.log(`Added step ${i + 1}: Transfer ${amount} SUI to ${recipientAddress.slice(0, 10)}...`);
+              const coins = await suiClient.getCoins({
+                owner: account.address,
+                coinType: tokenInfo.coinType,
+              });
+
+              if (!coins.data || coins.data.length === 0) {
+                throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet`);
+              }
+
+              // Calculate total available balance
+              const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+
+              if (totalBalance < BigInt(amountInSmallestUnit)) {
+                throw new Error(`Step ${i + 1}: Insufficient ${asset} balance`);
+              }
+
+              // Select coins to cover the amount
+              let remainingAmount = BigInt(amountInSmallestUnit);
+              const selectedCoins: string[] = [];
+
+              for (const coin of coins.data) {
+                if (remainingAmount <= 0) break;
+                selectedCoins.push(coin.coinObjectId);
+                remainingAmount -= BigInt(coin.balance);
+              }
+
+              // If we need multiple coins, merge them first
+              if (selectedCoins.length > 1) {
+                const [primaryCoin, ...coinsToMerge] = selectedCoins;
+                tx.mergeCoins(
+                  tx.object(primaryCoin),
+                  coinsToMerge.map(coin => tx.object(coin))
+                );
+                const [coinToTransfer] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
+                tx.transferObjects([coinToTransfer], recipientAddress);
+              } else {
+                // Single coin is enough
+                const [coinToTransfer] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
+                tx.transferObjects([coinToTransfer], recipientAddress);
+              }
+
+              console.log(`Added step ${i + 1}: Transfer ${amount} ${asset} to ${recipientAddress.slice(0, 10)}...`);
+            }
           }
         }
 

@@ -1,6 +1,7 @@
 import { useCurrentAccount, useSuiClientQuery, useDisconnectWallet, ConnectButton } from '@mysten/dapp-kit';
 import { Wallet, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { TOKENS } from '@/config/tokens';
 
 export function WalletConnect() {
   const account = useCurrentAccount();
@@ -8,17 +9,44 @@ export function WalletConnect() {
   const [showMenu, setShowMenu] = useState(false);
 
   // Get SUI balance
-  const { data: balance } = useSuiClientQuery(
+  const { data: suiBalance } = useSuiClientQuery(
     'getBalance',
-    { owner: account?.address || '' },
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.SUI.coinType,
+    },
     {
       enabled: !!account,
     }
   );
 
-  const formatBalance = (balance: string) => {
-    const sui = Number(balance) / 1_000_000_000; // Convert MIST to SUI
-    return sui.toFixed(4);
+  // Get USDC balance
+  const { data: usdcBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.USDC.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
+  // Get USDT balance
+  const { data: usdtBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.USDT.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
+  const formatBalance = (balance: string, decimals: number) => {
+    const amount = Number(balance) / Math.pow(10, decimals);
+    return amount.toFixed(decimals === 9 ? 4 : 2);
   };
 
   const formatAddress = (address: string) => {
@@ -36,14 +64,24 @@ export function WalletConnect() {
             </span>
           </div>
 
-          {balance && (
-            <div className="bg-green-50 border border-green-200 rounded px-2 py-1">
-              <div className="text-xs text-gray-600">Balance</div>
+          <div className="bg-green-50 border border-green-200 rounded px-2 py-1.5 space-y-1">
+            <div className="text-xs text-gray-600">Balance</div>
+            {suiBalance && (
               <div className="text-sm font-semibold text-green-700">
-                {formatBalance(balance.totalBalance)} SUI
+                {formatBalance(suiBalance.totalBalance, TOKENS.SUI.decimals)} SUI
               </div>
-            </div>
-          )}
+            )}
+            {usdcBalance && Number(usdcBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700">
+                {formatBalance(usdcBalance.totalBalance, TOKENS.USDC.decimals)} USDC
+              </div>
+            )}
+            {usdtBalance && Number(usdtBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700">
+                {formatBalance(usdtBalance.totalBalance, TOKENS.USDT.decimals)} USDT
+              </div>
+            )}
+          </div>
 
           <div className="relative w-full">
             <button

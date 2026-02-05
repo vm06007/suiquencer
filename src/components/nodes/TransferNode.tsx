@@ -5,6 +5,7 @@ import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
 import { SuiNSHelper } from '../SuiNSHelper';
+import { TOKENS } from '@/config/tokens';
 import type { NodeData } from '@/types';
 
 function TransferNode({ data, id }: NodeProps) {
@@ -21,17 +22,54 @@ function TransferNode({ data, id }: NodeProps) {
     isRegisteredButNoAddress?: boolean;
   }>({ isValidating: false, isValid: null, resolvedAddress: null, isRegisteredButNoAddress: false });
 
-  // Get wallet balance
-  const { data: balance } = useSuiClientQuery(
+  // Get wallet balances for all assets
+  const selectedAsset = (nodeData.asset || 'SUI') as keyof typeof TOKENS;
+
+  const { data: suiBalance } = useSuiClientQuery(
     'getBalance',
     {
       owner: account?.address || '',
-      coinType: '0x2::sui::SUI',
+      coinType: TOKENS.SUI.coinType,
     },
     {
       enabled: !!account,
     }
   );
+
+  const { data: usdcBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.USDC.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
+  const { data: usdtBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.USDT.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
+  // Get the balance for the selected asset
+  const balance = selectedAsset === 'SUI' ? suiBalance : selectedAsset === 'USDC' ? usdcBalance : usdtBalance;
+
+  // Format balance for dropdown display
+  const formatBalanceForDropdown = (tokenKey: keyof typeof TOKENS) => {
+    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : usdtBalance;
+    if (!tokenBalance) return tokenKey;
+    const decimals = TOKENS[tokenKey].decimals;
+    const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
+    const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+    return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
+  };
 
   // Calculate sequence number and cumulative amounts
   const { sequenceNumber, cumulativeAmount, totalAmount } = useMemo(() => {
@@ -104,36 +142,38 @@ function TransferNode({ data, id }: NodeProps) {
   const balanceWarning = useMemo(() => {
     if (!balance || !account) return null;
 
-    const balanceInSui = parseInt(balance.totalBalance) / 1_000_000_000;
+    const decimals = TOKENS[selectedAsset].decimals;
+    const balanceInToken = parseInt(balance.totalBalance) / Math.pow(10, decimals);
     const currentAmount = parseFloat(nodeData.amount || '0');
-    const gasReserve = 0.5; // Reserve for gas fees
+    const gasReserve = selectedAsset === 'SUI' ? 0.5 : 0; // Only reserve gas for SUI transfers
+    const displayDecimals = selectedAsset === 'SUI' ? 4 : 2;
 
     // Check if this individual transfer exceeds available balance
-    if (currentAmount > balanceInSui - gasReserve) {
+    if (currentAmount > balanceInToken - gasReserve) {
       return {
         type: 'error' as const,
-        message: `Exceeds wallet balance (${balanceInSui.toFixed(4)} SUI)`,
+        message: `Exceeds wallet balance (${balanceInToken.toFixed(displayDecimals)} ${selectedAsset})`,
       };
     }
 
     // Check if cumulative amount exceeds balance
-    if (cumulativeAmount > balanceInSui - gasReserve) {
+    if (cumulativeAmount > balanceInToken - gasReserve) {
       return {
         type: 'error' as const,
-        message: `Cumulative total (${cumulativeAmount.toFixed(4)} SUI) exceeds balance`,
+        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds balance`,
       };
     }
 
     // Warning if getting close to balance
-    if (totalAmount > balanceInSui - gasReserve) {
+    if (totalAmount > balanceInToken - gasReserve) {
       return {
         type: 'warning' as const,
-        message: `Total sequence (${totalAmount.toFixed(4)} SUI) exceeds balance`,
+        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds balance`,
       };
     }
 
     return null;
-  }, [balance, account, nodeData.amount, cumulativeAmount, totalAmount]);
+  }, [balance, account, nodeData.amount, cumulativeAmount, totalAmount, selectedAsset]);
 
   // Validate SuiNS name
   useEffect(() => {
@@ -226,9 +266,9 @@ function TransferNode({ data, id }: NodeProps) {
             onChange={(e) => updateNodeData({ asset: e.target.value })}
             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-green-500"
           >
-            <option value="SUI">SUI</option>
-            <option value="USDC">USDC</option>
-            <option value="USDT">USDT</option>
+            <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
+            <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
+            <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
           </select>
         </div>
 
