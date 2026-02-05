@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, ExternalLink, Copy, CheckCircle } from 'lucide-react';
+import { Search, ExternalLink } from 'lucide-react';
 
 interface SuiNSHelperProps {
   onSelectName: (name: string) => void;
@@ -16,13 +16,6 @@ const COMMON_NAMES = [
 
 export function SuiNSHelper({ onSelectName }: SuiNSHelperProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-
-  const handleCopy = (name: string) => {
-    navigator.clipboard.writeText(name);
-    setCopied(name);
-    setTimeout(() => setCopied(null), 2000);
-  };
 
   if (!isOpen) {
     return (

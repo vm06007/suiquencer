@@ -132,7 +132,7 @@ function TransferNode({ data, id }: NodeProps) {
 
       // This is a valid sequence node (transfer, swap, etc.)
       counter++;
-      const amount = parseFloat(node.data.amount || '0');
+      const amount = parseFloat(String(node.data.amount ?? '0'));
 
       if (!foundThisNode) {
         cumulative += amount;
@@ -217,7 +217,7 @@ function TransferNode({ data, id }: NodeProps) {
       const validateName = async () => {
         try {
           const suinsClient = new SuinsClient({
-            client: suiClient,
+            client: suiClient as any,
             network: 'mainnet'
           });
           // Pass the name directly - the client handles both @ and .sui formats

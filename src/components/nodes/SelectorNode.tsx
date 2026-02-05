@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
 import { Send, Repeat, Coins, Image, X } from 'lucide-react';
-import type { NodeData, ProtocolType } from '@/types';
+import type { ProtocolType } from '@/types';
 
 const PROTOCOL_OPTIONS = [
   { value: 'transfer', label: 'Transfer', icon: Send, color: 'green' },
@@ -10,9 +10,8 @@ const PROTOCOL_OPTIONS = [
   { value: 'nft', label: 'NFT', icon: Image, color: 'pink' },
 ] as const;
 
-function SelectorNode({ data, id }: NodeProps) {
+function SelectorNode({ id }: NodeProps) {
   const { setNodes } = useReactFlow();
-  const nodeData = data as NodeData;
 
   const handleProtocolSelect = useCallback((protocol: ProtocolType) => {
     setNodes((nds) =>

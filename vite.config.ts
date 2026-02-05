@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Force a single @mysten/sui at runtime so suins/pyth don't load an older BCS (byteVector API mismatch)
+      '@mysten/sui': path.resolve(__dirname, 'node_modules/@mysten/sui'),
     },
   },
 })

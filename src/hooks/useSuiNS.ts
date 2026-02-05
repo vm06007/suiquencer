@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useSuiClient } from '@mysten/dapp-kit';
 
 export function useSuiNS(nameOrAddress: string | undefined) {
-  const client = useSuiClient();
 
   return useQuery({
     queryKey: ['suins', nameOrAddress],
@@ -23,10 +21,7 @@ export function useSuiNS(nameOrAddress: string | undefined) {
         try {
           // Use SuiNS SDK to resolve the name
           // For now, we'll use the SuiNS contract directly
-          const SUINS_PACKAGE = '0xd22b24490e0bae52676651b4f56660a5ff8022a2576e0089f79b3c88d44e08f0';
-
-          // Query the name record
-          const name = nameOrAddress.replace('.sui', '');
+          // Query the name record (SuiNS resolution not yet fully implemented)
 
           // This is a simplified approach - you may need to adjust based on actual SuiNS implementation
           // For production, consider using @mysten/suins-toolkit

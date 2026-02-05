@@ -63,15 +63,18 @@ export function useSwapQuote(
           amount: amountInSmallestUnit,
         });
 
-        // Initialize Cetus Aggregator Client
-        const client = new AggregatorClient(suiClient);
+        // Initialize Cetus Aggregator Client; restrict to DEXes that don't need Pyth oracles
+        const client = new AggregatorClient({
+          client: suiClient as any,
+          pythUrls: ['https://hermes.pyth.network'],
+        });
 
-        // Find routes (SDK returns a single route object, not an array)
         const route = await client.findRouters({
           from: fromToken.coinType,
           target: toToken.coinType,
-          amount: amountInSmallestUnit,
+          amount: amountInSmallestUnit.toString(),
           byAmountIn: true,
+          providers: ['CETUS', 'BLUEFIN', 'FERRADLMM'],
         });
 
         console.log('Routes response:', route);
@@ -90,7 +93,7 @@ export function useSwapQuote(
           const amountOutDecimal = amountOutValue / Math.pow(10, toToken.decimals);
 
           // Convert deviation ratio to price impact percentage
-          const priceImpactPercent = parseFloat(deviationRatio) * 100;
+          const priceImpactPercent = Number(deviationRatio) * 100;
 
           setQuote({
             estimatedAmountOut: amountOutDecimal.toFixed(toToken.decimals === 9 ? 4 : 2),

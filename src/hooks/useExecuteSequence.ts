@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import toast from 'react-hot-toast';
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
 import { SuinsClient } from '@mysten/suins';
@@ -15,19 +16,19 @@ export function useExecuteSequence() {
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const suiClient = useSuiClient();
   const suinsClient = new SuinsClient({
-    client: suiClient,
+    client: suiClient as any,
     network: 'mainnet'
   });
 
   const executeSequence = useCallback(
     async (sequence: Node<NodeData>[]) => {
       if (!account) {
-        alert('Please connect your wallet first');
+        toast.error('Please connect your wallet first');
         return;
       }
 
       if (sequence.length === 0) {
-        alert('No transactions to execute');
+        toast.error('No transactions to execute');
         return;
       }
 
@@ -177,11 +178,13 @@ export function useExecuteSequence() {
 
             console.log(`Fetching swap route for ${amount} ${fromAsset} → ${toAsset}...`);
 
-            // Cetus Aggregator SDK: must pass { client, signer, env } for routerSwap (Pyth, etc.)
+            // Cetus Aggregator SDK: use providers that don't require Pyth oracles to avoid
+            // "All Pyth price nodes are unavailable" / reading 'from' errors in browser
             const aggregatorClient = new AggregatorClient({
-              client: suiClient,
+              client: suiClient as any,
               signer: account.address,
               env: Env.Mainnet,
+              pythUrls: ['https://hermes.pyth.network'],
             });
 
             const route = await aggregatorClient.findRouters({
@@ -189,10 +192,11 @@ export function useExecuteSequence() {
               target: toToken.coinType,
               amount: amountInSmallestUnit.toString(),
               byAmountIn: true,
+              providers: ['CETUS', 'BLUEFIN', 'FERRADLMM'],
             });
 
             if (!route || !route.amountOut || !route.packages?.get('aggregator_v3')) {
-              throw new Error(`Step ${i + 1}: No swap route found for ${fromAsset} → ${toAsset}`);
+              throw new Error(`Step ${i + 1}: No swap route found for ${fromAsset} → ${toAsset} (using CETUS, BLUEFIN, FERRADLMM). Try a different amount or pair.`);
             }
 
             console.log(`Route found: ${route.paths.length} hop(s), estimated output: ${route.amountOut.toString()}`);
@@ -253,7 +257,7 @@ export function useExecuteSequence() {
         // Execute the entire transaction block atomically (one signature, all or nothing)
         console.log('Executing atomic transaction block...');
         const result = await signAndExecuteTransaction({
-          transaction: tx,
+          transaction: tx as any,
         });
 
         console.log('Atomic transaction executed successfully:', result);
@@ -264,10 +268,11 @@ export function useExecuteSequence() {
           stepCount: sequence.length,
         });
 
+        toast.success(`Transaction confirmed (${sequence.length} step${sequence.length === 1 ? '' : 's'})`);
         return result;
       } catch (error: any) {
         console.error('Execution failed:', error);
-        alert(`Execution failed: ${error.message || 'Unknown error'}`);
+        toast.error(error.message || 'Execution failed');
         throw error;
       } finally {
         setIsExecuting(false);

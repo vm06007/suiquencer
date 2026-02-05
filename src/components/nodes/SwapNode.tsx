@@ -103,7 +103,7 @@ function SwapNode({ data, id }: NodeProps) {
       }
 
       counter++;
-      const amount = parseFloat(node.data.amount || '0');
+      const amount = parseFloat(String(node.data.amount ?? '0'));
 
       if (!foundThisNode) {
         cumulative += amount;
@@ -132,7 +132,7 @@ function SwapNode({ data, id }: NodeProps) {
   const fromAsset = (nodeData.fromAsset || 'SUI') as keyof typeof TOKENS;
   const fromBalance = fromAsset === 'SUI' ? suiBalance : fromAsset === 'USDC' ? usdcBalance : usdtBalance;
 
-  // Check balance validation for from asset
+  // Check balance validation for from asset (reserve gas when spending native SUI)
   const balanceWarning = useMemo(() => {
     if (!fromBalance || !account) return null;
 
@@ -140,26 +140,30 @@ function SwapNode({ data, id }: NodeProps) {
     const balanceInToken = parseInt(fromBalance.totalBalance) / Math.pow(10, decimals);
     const currentAmount = parseFloat(nodeData.amount || '0');
     const gasReserve = fromAsset === 'SUI' ? 0.5 : 0;
+    const availableBalance = balanceInToken - gasReserve;
     const displayDecimals = fromAsset === 'SUI' ? 4 : 2;
 
-    if (currentAmount > balanceInToken - gasReserve) {
+    if (currentAmount > availableBalance) {
+      const balanceMsg = fromAsset === 'SUI'
+        ? `available balance: ${availableBalance.toFixed(displayDecimals)} ${fromAsset} (0.5 SUI reserved for gas)`
+        : `wallet balance (${balanceInToken.toFixed(displayDecimals)} ${fromAsset})`;
       return {
         type: 'error' as const,
-        message: `Exceeds wallet balance (${balanceInToken.toFixed(displayDecimals)} ${fromAsset})`,
+        message: `Exceeds ${balanceMsg}`,
       };
     }
 
-    if (cumulativeAmount > balanceInToken - gasReserve) {
+    if (cumulativeAmount > availableBalance) {
       return {
         type: 'error' as const,
-        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds balance`,
+        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available balance (${availableBalance.toFixed(displayDecimals)})`,
       };
     }
 
-    if (totalAmount > balanceInToken - gasReserve) {
+    if (totalAmount > availableBalance) {
       return {
         type: 'warning' as const,
-        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds balance`,
+        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available balance (${availableBalance.toFixed(displayDecimals)})`,
       };
     }
 
