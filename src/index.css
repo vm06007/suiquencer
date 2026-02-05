@@ -19,3 +19,17 @@ body,
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Light mode: explicit light background so theme is visible */
+html:not(.dark),
+html:not(.dark) body,
+html:not(.dark) #root {
+  background-color: #f9fafb;
+}
+
+/* Dark mode: dark background */
+html.dark,
+html.dark body,
+html.dark #root {
+  background-color: #111827;
+}

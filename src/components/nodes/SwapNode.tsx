@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useEffect } from 'react';
+import { memo, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Repeat, Plus, X, AlertTriangle, Loader2, TrendingDown } from 'lucide-react';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
@@ -12,6 +12,9 @@ function SwapNode({ data, id }: NodeProps) {
   const edges = useEdges();
   const nodeData = data as NodeData;
   const account = useCurrentAccount();
+
+  // Track previous outgoing edges to detect when connections change
+  const prevOutgoingEdgesRef = useRef<string>('');
 
   // Get wallet balances for all assets
   const { data: suiBalance } = useSuiClientQuery(
@@ -213,13 +216,78 @@ function SwapNode({ data, id }: NodeProps) {
     }
   }, [swapQuote.estimatedAmountOut, nodeData.toAsset, updateNodeData]);
 
+  // Update all connected transfer nodes with split amounts when output changes
+  useEffect(() => {
+    if (!swapQuote.estimatedAmountOut || !nodeData.toAsset) return;
+
+    setNodes((nds) => {
+      const outgoingEdges = edges.filter((e) => e.source === id);
+
+      // Track edge changes
+      const edgeKey = outgoingEdges.map((e) => e.target).sort().join(',');
+      const edgesChanged = edgeKey !== prevOutgoingEdgesRef.current;
+      if (edgesChanged) {
+        prevOutgoingEdgesRef.current = edgeKey;
+      }
+
+      const transferTargetIds = new Set(
+        outgoingEdges
+          .map((edge) => {
+            const targetNode = nds.find((n) => n.id === edge.target);
+            return targetNode?.type === 'transfer' ? edge.target : null;
+          })
+          .filter(Boolean) as string[]
+      );
+
+      if (transferTargetIds.size === 0) return nds;
+
+      const totalOutput = parseFloat(swapQuote.estimatedAmountOut);
+      if (Number.isNaN(totalOutput)) return nds;
+
+      const splitAmount = totalOutput / transferTargetIds.size;
+      const amountStr = splitAmount <= 0 ? '0' : splitAmount < 0.0001 ? splitAmount.toExponential(2) : splitAmount.toFixed(6);
+
+      // Check if any updates are needed
+      const needsUpdate = nds.some((node) => {
+        if (!transferTargetIds.has(node.id)) return false;
+        const targetData = node.data as NodeData;
+        // Skip if user manually edited AND edges haven't changed
+        if (targetData.amountManuallyEdited && !edgesChanged) return false;
+        return targetData.asset !== nodeData.toAsset || targetData.amount !== amountStr;
+      });
+
+      if (!needsUpdate) return nds;
+
+      return nds.map((node) => {
+        if (transferTargetIds.has(node.id)) {
+          const targetData = node.data as NodeData;
+          // Skip auto-sync if user has manually edited AND edges haven't changed
+          if (targetData.amountManuallyEdited && !edgesChanged) return node;
+          // If values are already correct, don't update
+          if (targetData.asset === nodeData.toAsset && targetData.amount === amountStr) return node;
+
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              asset: nodeData.toAsset,
+              amount: amountStr,
+              amountManuallyEdited: false, // Reset flag when auto-updating
+            },
+          };
+        }
+        return node;
+      });
+    });
+  }, [swapQuote.estimatedAmountOut, nodeData.toAsset, edges, id, setNodes]);
+
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setNodes((nds) => nds.filter((node) => node.id !== id));
   }, [id, setNodes]);
 
   return (
-    <div className="bg-white border-2 border-blue-500 rounded-lg shadow-lg min-w-[280px]">
+    <div className="bg-white dark:bg-gray-800 border-2 border-blue-500 rounded-lg shadow-lg min-w-[280px]">
       <div className="bg-blue-500 px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Repeat className="w-4 h-4 text-white" />
@@ -239,11 +307,11 @@ function SwapNode({ data, id }: NodeProps) {
       <div className="p-4 space-y-3">
         {/* From Asset Selection */}
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">From</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">From</label>
           <select
             value={nodeData.fromAsset || 'SUI'}
             onChange={(e) => updateNodeData({ fromAsset: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500"
+            className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
           >
             <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
@@ -253,18 +321,18 @@ function SwapNode({ data, id }: NodeProps) {
 
         {/* Amount Input */}
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">Amount</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">Amount</label>
           <input
             type="text"
             value={nodeData.amount || ''}
             onChange={(e) => updateNodeData({ amount: e.target.value })}
             placeholder="0.0"
-            className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none ${
+            className={`w-full px-2 py-1.5 border rounded text-sm dark:bg-gray-700 dark:text-gray-100 focus:outline-none ${
               balanceWarning?.type === 'error'
                 ? 'border-red-500 focus:border-red-600'
                 : balanceWarning?.type === 'warning'
                 ? 'border-yellow-500 focus:border-yellow-600'
-                : 'border-gray-300 focus:border-blue-500'
+                : 'border-gray-300 dark:border-gray-600 focus:border-blue-500 dark:focus:border-blue-400'
             }`}
           />
           {balanceWarning && (
@@ -281,11 +349,11 @@ function SwapNode({ data, id }: NodeProps) {
 
         {/* To Asset Selection */}
         <div>
-          <label className="text-xs text-gray-600 mb-1 block">To</label>
+          <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">To</label>
           <select
             value={nodeData.toAsset || 'USDC'}
             onChange={(e) => updateNodeData({ toAsset: e.target.value })}
-            className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500"
+            className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
           >
             <option value="SUI">SUI</option>
             <option value="USDC">USDC</option>
@@ -294,18 +362,18 @@ function SwapNode({ data, id }: NodeProps) {
         </div>
 
         {/* Estimated Output */}
-        <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5">
-          <div className="text-xs text-gray-600 mb-0.5">Estimated Output</div>
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded px-2 py-1.5">
+          <div className="text-xs text-gray-600 dark:text-gray-300 mb-0.5">Estimated Output</div>
           {swapQuote.isLoading ? (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
               <Loader2 className="w-3 h-3 animate-spin" />
               <span>Fetching quote...</span>
             </div>
           ) : swapQuote.error ? (
-            <div className="text-xs text-red-600">{swapQuote.error}</div>
+            <div className="text-xs text-red-600 dark:text-red-400">{swapQuote.error}</div>
           ) : swapQuote.estimatedAmountOut ? (
             <>
-              <div className="text-sm font-semibold text-blue-700">
+              <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
                 ~{swapQuote.estimatedAmountOut} {nodeData.toAsset || 'USDC'}
               </div>
               {swapQuote.priceImpact && (
@@ -345,9 +413,9 @@ function SwapNode({ data, id }: NodeProps) {
       />
 
       {/* Add Sequence button */}
-      <div className="border-t border-gray-200 p-2 flex justify-center">
+      <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex justify-center">
         <button
-          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1 rounded transition-colors"
+          className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-1 rounded transition-colors"
           onClick={(e) => {
             e.stopPropagation();
             const event = new CustomEvent('addNode', {

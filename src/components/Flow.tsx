@@ -21,6 +21,7 @@ import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
 import { useExecuteSequence } from '@/hooks/useExecuteSequence';
+import { useTheme } from '@/hooks/useTheme';
 import type { NodeData } from '@/types';
 
 const nodeTypes: any = {
@@ -56,7 +57,7 @@ function FlowCanvas() {
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Execution hook
+  const { theme, toggleTheme } = useTheme();
   const { executeSequence, isExecuting, lastResult, clearResult } = useExecuteSequence();
 
   // Handle inserting a node (either between edges or after a selected node)
@@ -238,11 +239,12 @@ function FlowCanvas() {
       // Auto-prefill transfer node when connecting from swap
       if (targetNode?.type === 'transfer' && params.source) {
         setNodes((nds) => {
+          const newEdges = [...edges, { ...params }];
+
           // Get all incoming sources to this target
           const incomingSourceIds = new Set(
-            edges.filter((e) => e.target === params.target).map((e) => e.source)
+            newEdges.filter((e) => e.target === params.target).map((e) => e.source)
           );
-          incomingSourceIds.add(params.source);
 
           // Calculate total estimated output by symbol
           const sumsBySymbol: Record<string, number> = {};
@@ -271,17 +273,35 @@ function FlowCanvas() {
             (sumsBySymbol[a] ?? 0) >= (sumsBySymbol[b] ?? 0) ? a : b
           );
           const total = sumsBySymbol[asset] ?? 0;
-          const amountStr =
-            total <= 0 ? '0' : total < 0.0001 ? total.toExponential(2) : total.toFixed(6);
 
+          // Count how many transfer nodes are connected to the same source(s)
+          // to split the amount equally
+          const targetTransferIds = new Set<string>();
+          for (const sourceId of incomingSourceIds) {
+            const outgoingEdges = newEdges.filter((e) => e.source === sourceId);
+            for (const edge of outgoingEdges) {
+              const targetNode = nds.find((n) => n.id === edge.target);
+              if (targetNode?.type === 'transfer') {
+                targetTransferIds.add(edge.target);
+              }
+            }
+          }
+
+          const splitCount = targetTransferIds.size || 1;
+          const splitAmount = total / splitCount;
+          const amountStr =
+            splitAmount <= 0 ? '0' : splitAmount < 0.0001 ? splitAmount.toExponential(2) : splitAmount.toFixed(6);
+
+          // Update all connected transfer nodes with the split amount
           return nds.map((n) =>
-            n.id === params.target
+            targetTransferIds.has(n.id)
               ? {
                   ...n,
                   data: {
                     ...n.data,
                     asset,
                     amount: amountStr,
+                    amountManuallyEdited: false, // Reset flag when edges change
                   },
                 }
               : n
@@ -352,12 +372,14 @@ function FlowCanvas() {
   }, [nodes, setNodes, setEdges, edgeType]);
 
   return (
-    <div ref={containerRef} className="w-full h-screen bg-gray-50">
+    <div ref={containerRef} className="w-full h-screen bg-gray-50 dark:bg-gray-950">
       <Sidebar
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
         edgeType={edgeType}
         onEdgeTypeChange={handleEdgeTypeChange}
+        isDark={theme === 'dark'}
+        onToggleTheme={toggleTheme}
       />
       <div className="w-full h-full pl-16">
         <ReactFlow
@@ -375,7 +397,12 @@ function FlowCanvas() {
             style: { strokeWidth: 2, stroke: '#3b82f6' },
           }}
         >
-          <Background gap={16} size={1} color="#e5e7eb" />
+          <Background
+            gap={16}
+            size={1}
+            color={theme === 'dark' ? '#ffffff' : '#d1d5db'}
+            style={{ backgroundColor: theme === 'dark' ? '#030712' : '#f9fafb' }}
+          />
           <Controls />
         </ReactFlow>
       </div>

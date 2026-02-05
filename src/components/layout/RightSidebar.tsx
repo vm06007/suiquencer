@@ -61,7 +61,7 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           className={`p-3 rounded-l-lg shadow-lg transition-colors ${
             canInsert
               ? 'bg-green-600 hover:bg-green-700 text-white'
-              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+              : 'bg-gray-300 text-gray-500 dark:bg-gray-400 dark:text-gray-200 cursor-not-allowed'
           }`}
           title="Add sequence after selected node or insert between selected edge"
         >
@@ -75,7 +75,7 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           className={`p-3 rounded-l-lg shadow-lg transition-colors ${
             hasSelection
               ? 'bg-red-600 hover:bg-red-700 text-white'
-              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+              : 'bg-gray-300 text-gray-500 dark:bg-gray-400 dark:text-gray-200 cursor-not-allowed'
           }`}
           title="Delete selected items (Backspace/Delete)"
         >
@@ -89,7 +89,7 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           className={`p-3 rounded-l-lg shadow-lg transition-colors ${
             hasSequence && !isExecuting
               ? 'bg-purple-600 hover:bg-purple-700 text-white'
-              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+              : 'bg-gray-300 text-gray-500 dark:bg-gray-400 dark:text-gray-200 cursor-not-allowed'
           }`}
           title="Execute sequence now (no review)"
         >
@@ -108,20 +108,20 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
 
       {/* Sidebar Panel */}
       <div
-        className={`fixed right-0 top-0 h-screen w-80 bg-gray-900 border-l border-gray-700 shadow-2xl transform transition-transform duration-300 z-50 ${
+        className={`fixed right-0 top-0 h-screen w-80 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl transform transition-transform duration-300 z-50 ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-700">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-2">
-              <Play className="w-5 h-5 text-blue-400" />
-              <h2 className="text-white font-semibold">Execute Sequence</h2>
+              <Play className="w-5 h-5 text-blue-500 dark:text-blue-400" />
+              <h2 className="text-gray-900 dark:text-white font-semibold">Execute Sequence</h2>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -131,9 +131,9 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           <div className="flex-1 overflow-y-auto p-4">
             {hasSequence ? (
               <div className="space-y-3">
-                <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-3 mb-4">
-                  <div className="text-xs font-semibold text-blue-400 mb-1">⚛️ Atomic Transaction</div>
-                  <div className="text-xs text-gray-400">
+                <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-500/30 rounded-lg p-3 mb-4">
+                  <div className="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1">⚛️ Atomic Transaction</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
                     All {executionSequence.length} step{executionSequence.length !== 1 ? 's' : ''} execute in one transaction block - all succeed or all fail
                   </div>
                 </div>
@@ -141,27 +141,27 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                 {executionSequence.map((node, index) => (
                   <div
                     key={node.id}
-                    className="bg-gray-800 rounded-lg p-3 border border-gray-700"
+                    className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700"
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-semibold">
                         {index + 1}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-white text-sm mb-1">
+                        <div className="font-medium text-gray-900 dark:text-white text-sm mb-1">
                           {node.data.label}
                         </div>
                         {node.type === 'transfer' && (
                           <div className="space-y-1">
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="text-gray-500">Send:</span>{' '}
-                              <span className="text-green-400 font-mono">
+                              <span className="text-green-600 dark:text-green-400 font-mono">
                                 {node.data.amount || '0'} {node.data.asset || 'SUI'}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="text-gray-500">To:</span>{' '}
-                              <span className="text-blue-400 font-mono truncate block">
+                              <span className="text-blue-600 dark:text-blue-400 font-mono truncate block">
                                 {node.data.recipientAddress || 'Not set'}
                               </span>
                             </div>
@@ -169,15 +169,15 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                         )}
                         {node.type === 'swap' && (
                           <div className="space-y-1">
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="text-gray-500">Swap:</span>{' '}
-                              <span className="text-green-400 font-mono">
+                              <span className="text-green-600 dark:text-green-400 font-mono">
                                 {node.data.amount || '0'} {node.data.fromAsset || 'SUI'}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-400">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="text-gray-500">For:</span>{' '}
-                              <span className="text-blue-400 font-mono">
+                              <span className="text-blue-600 dark:text-blue-400 font-mono">
                                 ~{node.data.toAsset || 'USDC'}
                               </span>
                             </div>
@@ -201,14 +201,14 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           </div>
 
           {/* Execute Button */}
-          <div className="p-4 border-t border-gray-700">
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={onExecute}
               disabled={!hasSequence || isExecuting}
               className={`w-full py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
                 hasSequence && !isExecuting
                   ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
-                  : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
               }`}
             >
               {isExecuting ? (
@@ -233,7 +233,7 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
         </div>
       </div>
 
-      {/* Overlay when open */}
+      {/* Overlay when open - same in both themes */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40"

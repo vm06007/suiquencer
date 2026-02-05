@@ -323,7 +323,7 @@ function TransferNode({ data, id }: NodeProps) {
           <input
             type="text"
             value={nodeData.amount || ''}
-            onChange={(e) => updateNodeData({ amount: e.target.value })}
+            onChange={(e) => updateNodeData({ amount: e.target.value, amountManuallyEdited: true })}
             placeholder="0.0"
             className={`w-full px-2 py-1.5 border rounded text-sm focus:outline-none ${
               balanceWarning?.type === 'error'

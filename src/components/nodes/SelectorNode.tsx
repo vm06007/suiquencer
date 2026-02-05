@@ -31,6 +31,7 @@ function SelectorNode({ id }: NodeProps) {
       if (protocol === 'transfer') {
         // Calculate total estimated output by symbol from all incoming swap nodes
         const sumsBySymbol: Record<string, number> = {};
+        const sourceSwapIds = new Set<string>();
 
         for (const sourceNode of sourceNodes) {
           const sourceData = sourceNode?.data as NodeData | undefined;
@@ -40,6 +41,7 @@ function SelectorNode({ id }: NodeProps) {
             sourceData?.estimatedAmountOutSymbol &&
             sourceData?.estimatedAmountOut
           ) {
+            sourceSwapIds.add(sourceNode.id);
             const sym = sourceData.estimatedAmountOutSymbol;
             const amt = parseFloat(sourceData.estimatedAmountOut);
             if (!Number.isNaN(amt)) {
@@ -55,11 +57,27 @@ function SelectorNode({ id }: NodeProps) {
             (sumsBySymbol[a] ?? 0) >= (sumsBySymbol[b] ?? 0) ? a : b
           );
           const total = sumsBySymbol[prefillAsset] ?? 0;
-          prefillAmount = total <= 0 ? '0' : total < 0.0001 ? total.toExponential(2) : total.toFixed(6);
+
+          // Count how many transfer nodes will be connected to the same swap source(s)
+          const targetTransferIds = new Set<string>();
+          for (const swapId of sourceSwapIds) {
+            const outgoingEdges = edges.filter((e) => e.source === swapId);
+            for (const edge of outgoingEdges) {
+              const targetNode = nds.find((n) => n.id === edge.target);
+              if (targetNode?.type === 'transfer' || edge.target === id) {
+                targetTransferIds.add(edge.target);
+              }
+            }
+          }
+
+          const splitCount = targetTransferIds.size || 1;
+          const splitAmount = total / splitCount;
+          prefillAmount = splitAmount <= 0 ? '0' : splitAmount < 0.0001 ? splitAmount.toExponential(2) : splitAmount.toFixed(6);
         }
       }
 
-      return nds.map((node) => {
+      // If creating a transfer, update all sibling transfers connected to the same swap
+      let updatedNodes = nds.map((node) => {
         if (node.id === id) {
           // Change the node type based on selection
           const nodeType = protocol === 'transfer' ? 'transfer' : protocol === 'swap' ? 'swap' : 'protocol';
@@ -82,6 +100,47 @@ function SelectorNode({ id }: NodeProps) {
         }
         return node;
       });
+
+      // Update all sibling transfer nodes with the new split amount
+      if (protocol === 'transfer' && prefillAsset && prefillAmount) {
+        const sourceSwapIds = new Set<string>();
+        for (const sourceNode of sourceNodes) {
+          if (sourceNode?.type === 'swap') {
+            sourceSwapIds.add(sourceNode.id);
+          }
+        }
+
+        // Find all transfer nodes connected to the same swap sources
+        const siblingTransferIds = new Set<string>();
+        for (const swapId of sourceSwapIds) {
+          const outgoingEdges = edges.filter((e) => e.source === swapId);
+          for (const edge of outgoingEdges) {
+            const targetNode = updatedNodes.find((n) => n.id === edge.target);
+            if (targetNode?.type === 'transfer') {
+              siblingTransferIds.add(edge.target);
+            }
+          }
+        }
+
+        // Update all sibling transfers with the split amount
+        updatedNodes = updatedNodes.map((node) => {
+          if (siblingTransferIds.has(node.id)) {
+            const nodeData = node.data as NodeData;
+            return {
+              ...node,
+              data: {
+                ...nodeData,
+                asset: prefillAsset,
+                amount: prefillAmount,
+                amountManuallyEdited: false, // Reset flag when edges change
+              },
+            };
+          }
+          return node;
+        });
+      }
+
+      return updatedNodes;
     });
   }, [id, setNodes, edges, getNodes]);
 
@@ -91,12 +150,12 @@ function SelectorNode({ id }: NodeProps) {
   }, [id, setNodes]);
 
   return (
-    <div className="bg-white border-2 border-gray-400 border-dashed rounded-lg shadow-lg min-w-[280px]">
-      <div className="bg-gray-100 px-3 py-2 flex items-center justify-between border-b border-gray-300">
-        <span className="font-semibold text-gray-700 text-sm">Select Action</span>
+    <div className="bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 border-dashed rounded-lg shadow-lg min-w-[280px]">
+      <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2 flex items-center justify-between border-b border-gray-300 dark:border-gray-600">
+        <span className="font-semibold text-gray-700 dark:text-gray-200 text-sm">Select Action</span>
         <button
           onClick={handleDelete}
-          className="text-gray-600 hover:text-red-600 transition-colors"
+          className="text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
           title="Delete node"
         >
           <X className="w-4 h-4" />
@@ -104,35 +163,35 @@ function SelectorNode({ id }: NodeProps) {
       </div>
 
       <div className="p-4 space-y-2">
-        <p className="text-xs text-gray-600 mb-3">Choose what this sequence step should do:</p>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">Choose what this sequence step should do:</p>
 
         {PROTOCOL_OPTIONS.map(({ value, label, icon: Icon }) => (
           <button
             key={value}
             onClick={() => handleProtocolSelect(value as ProtocolType)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 border-2 border-gray-200 rounded-lg transition-all hover:shadow-md group ${
-              value === 'transfer' ? 'hover:border-green-400 hover:bg-green-50' :
-              value === 'swap' ? 'hover:border-blue-400 hover:bg-blue-50' :
-              value === 'stake' ? 'hover:border-purple-400 hover:bg-purple-50' :
-              'hover:border-pink-400 hover:bg-pink-50'
+            className={`w-full flex items-center gap-3 px-3 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-lg transition-all hover:shadow-md group ${
+              value === 'transfer' ? 'hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20' :
+              value === 'swap' ? 'hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20' :
+              value === 'stake' ? 'hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20' :
+              'hover:border-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20'
             }`}
           >
             <div className={`p-2 rounded transition-colors ${
-              value === 'transfer' ? 'bg-green-100 group-hover:bg-green-200' :
-              value === 'swap' ? 'bg-blue-100 group-hover:bg-blue-200' :
-              value === 'stake' ? 'bg-purple-100 group-hover:bg-purple-200' :
-              'bg-pink-100 group-hover:bg-pink-200'
+              value === 'transfer' ? 'bg-green-100 dark:bg-green-900/30 group-hover:bg-green-200 dark:group-hover:bg-green-900/40' :
+              value === 'swap' ? 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40' :
+              value === 'stake' ? 'bg-purple-100 dark:bg-purple-900/30 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/40' :
+              'bg-pink-100 dark:bg-pink-900/30 group-hover:bg-pink-200 dark:group-hover:bg-pink-900/40'
             }`}>
               <Icon className={`w-4 h-4 ${
-                value === 'transfer' ? 'text-green-600' :
-                value === 'swap' ? 'text-blue-600' :
-                value === 'stake' ? 'text-purple-600' :
-                'text-pink-600'
+                value === 'transfer' ? 'text-green-600 dark:text-green-400' :
+                value === 'swap' ? 'text-blue-600 dark:text-blue-400' :
+                value === 'stake' ? 'text-purple-600 dark:text-purple-400' :
+                'text-pink-600 dark:text-pink-400'
               }`} />
             </div>
             <div className="text-left">
-              <div className="font-medium text-sm text-gray-900">{label}</div>
-              <div className="text-xs text-gray-500">
+              <div className="font-medium text-sm text-gray-900 dark:text-gray-100">{label}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
                 {value === 'transfer' && 'Send tokens to an address'}
                 {value === 'swap' && 'Swap between tokens'}
                 {value === 'stake' && 'Stake tokens for rewards'}
