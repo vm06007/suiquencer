@@ -228,13 +228,68 @@ function FlowCanvas() {
       const targetNode = nodes.find(n => n.id === params.target);
       const isTargetSelector = targetNode?.type === 'selector';
 
+      // Add the edge
       setEdges((eds) => addEdge({
         ...params,
         animated: isTargetSelector,
         style: { strokeWidth: 2, stroke: '#3b82f6' },
       }, eds));
+
+      // Auto-prefill transfer node when connecting from swap
+      if (targetNode?.type === 'transfer' && params.source) {
+        setNodes((nds) => {
+          // Get all incoming sources to this target
+          const incomingSourceIds = new Set(
+            edges.filter((e) => e.target === params.target).map((e) => e.source)
+          );
+          incomingSourceIds.add(params.source);
+
+          // Calculate total estimated output by symbol
+          const sumsBySymbol: Record<string, number> = {};
+          for (const sourceId of incomingSourceIds) {
+            const src = nds.find((n) => n.id === sourceId);
+            const d = src?.data as NodeData | undefined;
+
+            if (
+              src?.type === 'swap' &&
+              d?.estimatedAmountOutSymbol &&
+              d?.estimatedAmountOut != null
+            ) {
+              const sym = d.estimatedAmountOutSymbol;
+              const amt = parseFloat(d.estimatedAmountOut);
+              if (!Number.isNaN(amt)) {
+                sumsBySymbol[sym] = (sumsBySymbol[sym] ?? 0) + amt;
+              }
+            }
+          }
+
+          const symbols = Object.keys(sumsBySymbol);
+          if (symbols.length === 0) return nds;
+
+          // Use the symbol with the largest sum
+          const asset = symbols.reduce((a, b) =>
+            (sumsBySymbol[a] ?? 0) >= (sumsBySymbol[b] ?? 0) ? a : b
+          );
+          const total = sumsBySymbol[asset] ?? 0;
+          const amountStr =
+            total <= 0 ? '0' : total < 0.0001 ? total.toExponential(2) : total.toFixed(6);
+
+          return nds.map((n) =>
+            n.id === params.target
+              ? {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    asset,
+                    amount: amountStr,
+                  },
+                }
+              : n
+          );
+        });
+      }
     },
-    [setEdges, nodes]
+    [setEdges, setNodes, nodes, edges]
   );
 
   const handleToggleFullscreen = useCallback(() => {

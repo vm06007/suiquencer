@@ -16,4 +16,15 @@ export interface NodeData extends Record<string, unknown> {
   // Swap specific
   fromAsset?: string;
   toAsset?: string;
+  estimatedAmountOut?: string;
+  estimatedAmountOutSymbol?: string;
+  // Tracking
+  amountManuallyEdited?: boolean;
+  sequenceNumber?: number;
+}
+
+export interface TokenBalance {
+  symbol: string;
+  balance: string;
+  isLoading: boolean;
 }

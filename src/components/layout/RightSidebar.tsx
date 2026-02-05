@@ -82,7 +82,21 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           <Trash2 className="w-5 h-5" />
         </button>
 
-        {/* Toggle Panel Button */}
+        {/* Execute Now Button - run sequence without opening the panel */}
+        <button
+          onClick={onExecute}
+          disabled={!hasSequence || isExecuting}
+          className={`p-3 rounded-l-lg shadow-lg transition-colors ${
+            hasSequence && !isExecuting
+              ? 'bg-purple-600 hover:bg-purple-700 text-white'
+              : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+          }`}
+          title="Execute sequence now (no review)"
+        >
+          <Play className="w-5 h-5" />
+        </button>
+
+        {/* Toggle Panel Button - review sequence then execute */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="bg-blue-600 text-white p-3 rounded-l-lg shadow-lg hover:bg-blue-700 transition-colors"

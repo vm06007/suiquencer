@@ -1,8 +1,8 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useEffect } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Repeat, Plus, X, AlertTriangle, Loader2, TrendingDown } from 'lucide-react';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
-import { TOKENS } from '@/config/tokens';
+import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useSwapQuote } from '@/hooks/useSwapQuote';
 import type { NodeData } from '@/types';
 
@@ -47,7 +47,10 @@ function SwapNode({ data, id }: NodeProps) {
     }
   );
 
-  // Calculate sequence number
+  // Get balance for the from asset (needed for per-asset cumulative)
+  const fromAsset = (nodeData.fromAsset || 'SUI') as keyof typeof TOKENS;
+
+  // Calculate sequence number and cumulative amounts (per asset — only sum same token)
   const { sequenceNumber, cumulativeAmount, totalAmount } = useMemo(() => {
     const walletNode = nodes.find(n => n.type === 'wallet');
     if (!walletNode) return { sequenceNumber: 0, cumulativeAmount: 0, totalAmount: 0 };
@@ -66,7 +69,6 @@ function SwapNode({ data, id }: NodeProps) {
 
       if (!node || node.type === 'wallet') {
         const outgoing = edges.filter(e => e.source === nodeId);
-        // Sort edges by target node position (Y first, then X) for consistent ordering
         const sortedEdges = outgoing.sort((a, b) => {
           const targetA = nodes.find(n => n.id === a.target);
           const targetB = nodes.find(n => n.id === b.target);
@@ -85,7 +87,6 @@ function SwapNode({ data, id }: NodeProps) {
 
       if (node.type === 'selector') {
         const outgoing = edges.filter(e => e.source === nodeId);
-        // Sort edges by target node position for consistent ordering
         const sortedEdges = outgoing.sort((a, b) => {
           const targetA = nodes.find(n => n.id === a.target);
           const targetB = nodes.find(n => n.id === b.target);
@@ -102,13 +103,20 @@ function SwapNode({ data, id }: NodeProps) {
         return null;
       }
 
+      // Sequence node: only count amount that spends the same from-asset as this swap
       counter++;
       const amount = parseFloat(String(node.data.amount ?? '0'));
+      const nodeFromAsset = node.type === 'transfer'
+        ? (node.data.asset || 'SUI')
+        : node.type === 'swap'
+        ? (node.data.fromAsset as string)
+        : null;
+      const amountOfThisAsset = nodeFromAsset === fromAsset ? amount : 0;
 
       if (!foundThisNode) {
-        cumulative += amount;
+        cumulative += amountOfThisAsset;
       }
-      total += amount;
+      total += amountOfThisAsset;
 
       if (nodeId === id) {
         foundThisNode = true;
@@ -126,44 +134,42 @@ function SwapNode({ data, id }: NodeProps) {
 
     traverse(walletNode.id);
     return { sequenceNumber: counter, cumulativeAmount: cumulative, totalAmount: total };
-  }, [id, nodes, edges]);
+  }, [id, nodes, edges, fromAsset]);
 
-  // Get balance for the from asset
-  const fromAsset = (nodeData.fromAsset || 'SUI') as keyof typeof TOKENS;
   const fromBalance = fromAsset === 'SUI' ? suiBalance : fromAsset === 'USDC' ? usdcBalance : usdtBalance;
 
-  // Check balance validation for from asset (reserve gas when spending native SUI)
+  // Check balance validation for from asset (reserve SUI for gas when spending native SUI)
   const balanceWarning = useMemo(() => {
     if (!fromBalance || !account) return null;
 
     const decimals = TOKENS[fromAsset].decimals;
     const balanceInToken = parseInt(fromBalance.totalBalance) / Math.pow(10, decimals);
     const currentAmount = parseFloat(nodeData.amount || '0');
-    const gasReserve = fromAsset === 'SUI' ? 0.5 : 0;
+    const gasReserve = fromAsset === 'SUI' ? SUI_GAS_RESERVE : 0;
     const availableBalance = balanceInToken - gasReserve;
     const displayDecimals = fromAsset === 'SUI' ? 4 : 2;
 
     if (currentAmount > availableBalance) {
-      const balanceMsg = fromAsset === 'SUI'
-        ? `available balance: ${availableBalance.toFixed(displayDecimals)} ${fromAsset} (0.5 SUI reserved for gas)`
-        : `wallet balance (${balanceInToken.toFixed(displayDecimals)} ${fromAsset})`;
+      const message = fromAsset === 'SUI'
+        ? `Not enough for fees — leave ~${SUI_GAS_RESERVE} SUI for gas. Max swap: ${availableBalance.toFixed(displayDecimals)} SUI`
+        : `Exceeds wallet balance (${balanceInToken.toFixed(displayDecimals)} ${fromAsset})`;
       return {
         type: 'error' as const,
-        message: `Exceeds ${balanceMsg}`,
+        message,
       };
     }
 
     if (cumulativeAmount > availableBalance) {
       return {
         type: 'error' as const,
-        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available balance (${availableBalance.toFixed(displayDecimals)})`,
+        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
       };
     }
 
     if (totalAmount > availableBalance) {
       return {
         type: 'warning' as const,
-        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available balance (${availableBalance.toFixed(displayDecimals)})`,
+        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
       };
     }
 
@@ -196,6 +202,16 @@ function SwapNode({ data, id }: NodeProps) {
       )
     );
   }, [id, setNodes]);
+
+  // Store estimated output in node data for downstream nodes
+  useEffect(() => {
+    if (swapQuote.estimatedAmountOut && nodeData.toAsset) {
+      updateNodeData({
+        estimatedAmountOut: swapQuote.estimatedAmountOut,
+        estimatedAmountOutSymbol: nodeData.toAsset,
+      });
+    }
+  }, [swapQuote.estimatedAmountOut, nodeData.toAsset, updateNodeData]);
 
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

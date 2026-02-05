@@ -1,4 +1,7 @@
 // Mainnet token addresses for SUI blockchain
+/** Reserve this much SUI when spending native SUI (transfer/swap) so the user can pay gas. ~0.003 SUI/tx typical. */
+export const SUI_GAS_RESERVE = 0.01;
+
 export const TOKENS = {
   SUI: {
     symbol: 'SUI',

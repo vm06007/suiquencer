@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
+import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react';
 import { Send, Repeat, Coins, Image, X } from 'lucide-react';
-import type { ProtocolType } from '@/types';
+import type { ProtocolType, NodeData } from '@/types';
 
 const PROTOCOL_OPTIONS = [
   { value: 'transfer', label: 'Transfer', icon: Send, color: 'green' },
@@ -11,11 +11,55 @@ const PROTOCOL_OPTIONS = [
 ] as const;
 
 function SelectorNode({ id }: NodeProps) {
-  const { setNodes } = useReactFlow();
+  const { setNodes, getNodes } = useReactFlow();
+  const edges = useEdges();
 
   const handleProtocolSelect = useCallback((protocol: ProtocolType) => {
-    setNodes((nds) =>
-      nds.map((node) => {
+    setNodes((nds) => {
+      // Find incoming edges to this selector node
+      const incomingEdges = edges.filter((e) => e.target === id);
+
+      // Get source nodes
+      const sourceNodes = incomingEdges.map((edge) =>
+        nds.find((n) => n.id === edge.source)
+      ).filter(Boolean);
+
+      // Check if any source is a swap node with output
+      let prefillAsset: string | undefined;
+      let prefillAmount: string | undefined;
+
+      if (protocol === 'transfer') {
+        // Calculate total estimated output by symbol from all incoming swap nodes
+        const sumsBySymbol: Record<string, number> = {};
+
+        for (const sourceNode of sourceNodes) {
+          const sourceData = sourceNode?.data as NodeData | undefined;
+
+          if (
+            sourceNode?.type === 'swap' &&
+            sourceData?.estimatedAmountOutSymbol &&
+            sourceData?.estimatedAmountOut
+          ) {
+            const sym = sourceData.estimatedAmountOutSymbol;
+            const amt = parseFloat(sourceData.estimatedAmountOut);
+            if (!Number.isNaN(amt)) {
+              sumsBySymbol[sym] = (sumsBySymbol[sym] ?? 0) + amt;
+            }
+          }
+        }
+
+        const symbols = Object.keys(sumsBySymbol);
+        if (symbols.length > 0) {
+          // Use the symbol with the largest sum
+          prefillAsset = symbols.reduce((a, b) =>
+            (sumsBySymbol[a] ?? 0) >= (sumsBySymbol[b] ?? 0) ? a : b
+          );
+          const total = sumsBySymbol[prefillAsset] ?? 0;
+          prefillAmount = total <= 0 ? '0' : total < 0.0001 ? total.toExponential(2) : total.toFixed(6);
+        }
+      }
+
+      return nds.map((node) => {
         if (node.id === id) {
           // Change the node type based on selection
           const nodeType = protocol === 'transfer' ? 'transfer' : protocol === 'swap' ? 'swap' : 'protocol';
@@ -27,9 +71,9 @@ function SelectorNode({ id }: NodeProps) {
               ...node.data,
               protocol,
               label: protocol.charAt(0).toUpperCase() + protocol.slice(1),
-              // Initialize with defaults
-              asset: protocol === 'transfer' ? 'SUI' : undefined,
-              amount: '',
+              // Initialize with defaults or pre-filled values from swap
+              asset: protocol === 'transfer' ? (prefillAsset || 'SUI') : undefined,
+              amount: protocol === 'transfer' ? (prefillAmount || '') : '',
               recipientAddress: protocol === 'transfer' ? '' : undefined,
               fromAsset: protocol === 'swap' ? 'SUI' : undefined,
               toAsset: protocol === 'swap' ? 'USDC' : undefined,
@@ -37,9 +81,9 @@ function SelectorNode({ id }: NodeProps) {
           };
         }
         return node;
-      })
-    );
-  }, [id, setNodes]);
+      });
+    });
+  }, [id, setNodes, edges, getNodes]);
 
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

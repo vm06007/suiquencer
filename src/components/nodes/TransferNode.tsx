@@ -5,7 +5,8 @@ import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
 import { SuiNSHelper } from '../SuiNSHelper';
-import { TOKENS } from '@/config/tokens';
+import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
+import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import type { NodeData } from '@/types';
 
 function TransferNode({ data, id }: NodeProps) {
@@ -61,8 +62,18 @@ function TransferNode({ data, id }: NodeProps) {
   // Get the balance for the selected asset
   const balance = selectedAsset === 'SUI' ? suiBalance : selectedAsset === 'USDC' ? usdcBalance : usdtBalance;
 
-  // Format balance for dropdown display
+  // Get effective balances (wallet balance + effects of previous operations)
+  const { effectiveBalances } = useEffectiveBalances(id, true);
+
+  // Format balance for dropdown display with effective balance
   const formatBalanceForDropdown = (tokenKey: keyof typeof TOKENS) => {
+    const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
+    if (effectiveBal && effectiveBalances.length > 0) {
+      const amount = parseFloat(effectiveBal.balance);
+      const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+      return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
+    }
+    // Fallback to wallet balance
     const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : usdtBalance;
     if (!tokenBalance) return tokenKey;
     const decimals = TOKENS[tokenKey].decimals;
@@ -71,13 +82,11 @@ function TransferNode({ data, id }: NodeProps) {
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
 
-  // Calculate sequence number and cumulative amounts
+  // Calculate sequence number and cumulative amounts (per asset — only sum same token)
   const { sequenceNumber, cumulativeAmount, totalAmount } = useMemo(() => {
-    // Find wallet node
     const walletNode = nodes.find(n => n.type === 'wallet');
     if (!walletNode) return { sequenceNumber: 0, cumulativeAmount: 0, totalAmount: 0 };
 
-    // Calculate cumulative amount up to this node and total amount
     let counter = 0;
     let cumulative = 0;
     let total = 0;
@@ -90,10 +99,8 @@ function TransferNode({ data, id }: NodeProps) {
 
       const node = nodes.find(n => n.id === nodeId);
 
-      // Skip wallet and selector nodes, but continue traversing through them
       if (!node || node.type === 'wallet') {
         const outgoing = edges.filter(e => e.source === nodeId);
-        // Sort edges by target node position (Y first, then X) for consistent ordering
         const sortedEdges = outgoing.sort((a, b) => {
           const targetA = nodes.find(n => n.id === a.target);
           const targetB = nodes.find(n => n.id === b.target);
@@ -110,10 +117,8 @@ function TransferNode({ data, id }: NodeProps) {
         return null;
       }
 
-      // Skip selector nodes but continue through them
       if (node.type === 'selector') {
         const outgoing = edges.filter(e => e.source === nodeId);
-        // Sort edges by target node position for consistent ordering
         const sortedEdges = outgoing.sort((a, b) => {
           const targetA = nodes.find(n => n.id === a.target);
           const targetB = nodes.find(n => n.id === b.target);
@@ -130,21 +135,26 @@ function TransferNode({ data, id }: NodeProps) {
         return null;
       }
 
-      // This is a valid sequence node (transfer, swap, etc.)
+      // Sequence node: only count amount for the same asset as this transfer
       counter++;
       const amount = parseFloat(String(node.data.amount ?? '0'));
+      const nodeAsset = node.type === 'transfer'
+        ? (node.data.asset || 'SUI')
+        : node.type === 'swap'
+        ? (node.data.fromAsset as string)
+        : null;
+      const amountOfThisAsset = nodeAsset === selectedAsset ? amount : 0;
 
       if (!foundThisNode) {
-        cumulative += amount;
+        cumulative += amountOfThisAsset;
       }
-      total += amount;
+      total += amountOfThisAsset;
 
       if (nodeId === id) {
         foundThisNode = true;
         return counter;
       }
 
-      // Continue traversing
       const outgoing = edges.filter(e => e.source === nodeId);
       for (const edge of outgoing) {
         const result = traverse(edge.target);
@@ -156,44 +166,59 @@ function TransferNode({ data, id }: NodeProps) {
 
     traverse(walletNode.id);
     return { sequenceNumber: counter, cumulativeAmount: cumulative, totalAmount: total };
-  }, [id, nodes, edges]);
+  }, [id, nodes, edges, selectedAsset]);
 
-  // Check balance validation
+  // Check balance validation (reserve SUI for gas when transferring native SUI)
   const balanceWarning = useMemo(() => {
-    if (!balance || !account) return null;
+    if (!account) return null;
 
-    const decimals = TOKENS[selectedAsset].decimals;
-    const balanceInToken = parseInt(balance.totalBalance) / Math.pow(10, decimals);
+    // Use effective balance if available, otherwise fallback to wallet balance
+    const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
+    let balanceInToken: number;
+
+    if (effectiveBal && effectiveBalances.length > 0) {
+      balanceInToken = parseFloat(effectiveBal.balance);
+    } else if (balance) {
+      const decimals = TOKENS[selectedAsset].decimals;
+      balanceInToken = parseInt(balance.totalBalance) / Math.pow(10, decimals);
+    } else {
+      return null;
+    }
+
     const currentAmount = parseFloat(nodeData.amount || '0');
-    const gasReserve = selectedAsset === 'SUI' ? 0.5 : 0; // Only reserve gas for SUI transfers
+    const gasReserve = selectedAsset === 'SUI' ? SUI_GAS_RESERVE : 0;
+    const availableBalance = balanceInToken - gasReserve;
     const displayDecimals = selectedAsset === 'SUI' ? 4 : 2;
 
     // Check if this individual transfer exceeds available balance
-    if (currentAmount > balanceInToken - gasReserve) {
+    if (currentAmount > availableBalance) {
+      const message = selectedAsset === 'SUI'
+        ? `Not enough for fees — leave ~${SUI_GAS_RESERVE} SUI for gas. Max send: ${availableBalance.toFixed(displayDecimals)} SUI`
+        : `Exceeds available balance (${balanceInToken.toFixed(displayDecimals)} ${selectedAsset})`;
       return {
         type: 'error' as const,
-        message: `Exceeds wallet balance (${balanceInToken.toFixed(displayDecimals)} ${selectedAsset})`,
+        message,
       };
     }
 
     // Check if cumulative amount exceeds balance
-    if (cumulativeAmount > balanceInToken - gasReserve) {
+    if (cumulativeAmount > availableBalance) {
       return {
         type: 'error' as const,
-        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds balance`,
+        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
       };
     }
 
     // Warning if getting close to balance
-    if (totalAmount > balanceInToken - gasReserve) {
+    if (totalAmount > availableBalance) {
       return {
         type: 'warning' as const,
-        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds balance`,
+        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
       };
     }
 
     return null;
-  }, [balance, account, nodeData.amount, cumulativeAmount, totalAmount, selectedAsset]);
+  }, [balance, account, nodeData.amount, cumulativeAmount, totalAmount, selectedAsset, effectiveBalances]);
 
   // Validate SuiNS name
   useEffect(() => {
