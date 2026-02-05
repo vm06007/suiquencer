@@ -51,67 +51,108 @@ function FlowCanvas() {
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('smoothstep');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
+  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Execution hook
   const { executeSequence, isExecuting, lastResult, clearResult } = useExecuteSequence();
 
-  // Handle inserting a node between two connected nodes
+  // Handle inserting a node (either between edges or after a selected node)
   const handleInsertNode = useCallback(() => {
-    if (selectedEdges.length !== 1) return;
+    // Case 1: Edge is selected - insert node between two connected nodes
+    if (selectedEdges.length === 1) {
+      const selectedEdge = edges.find(e => e.id === selectedEdges[0]);
+      if (!selectedEdge) return;
 
-    const selectedEdge = edges.find(e => e.id === selectedEdges[0]);
-    if (!selectedEdge) return;
+      const sourceNode = nodes.find(n => n.id === selectedEdge.source);
+      const targetNode = nodes.find(n => n.id === selectedEdge.target);
+      if (!sourceNode || !targetNode) return;
 
-    const sourceNode = nodes.find(n => n.id === selectedEdge.source);
-    const targetNode = nodes.find(n => n.id === selectedEdge.target);
-    if (!sourceNode || !targetNode) return;
+      // Create new selector node positioned between source and target
+      const newNode: Node<NodeData> = {
+        id: `node-${nodeId++}`,
+        type: 'selector',
+        position: {
+          x: (sourceNode.position.x + targetNode.position.x) / 2,
+          y: (sourceNode.position.y + targetNode.position.y) / 2,
+        },
+        data: {
+          label: 'Select Action',
+          type: 'protocol',
+        },
+      };
 
-    // Create new selector node positioned between source and target
-    const newNode: Node<NodeData> = {
-      id: `node-${nodeId++}`,
-      type: 'selector',
-      position: {
-        x: (sourceNode.position.x + targetNode.position.x) / 2,
-        y: (sourceNode.position.y + targetNode.position.y) / 2,
-      },
-      data: {
-        label: 'Select Action',
-        type: 'protocol',
-      },
-    };
+      // Add the new node
+      setNodes((nds) => [...nds, newNode]);
 
-    // Add the new node
-    setNodes((nds) => [...nds, newNode]);
+      // Remove the old edge and create two new edges
+      setEdges((eds) => [
+        ...eds.filter(e => e.id !== selectedEdge.id),
+        {
+          id: `e${selectedEdge.source}-${newNode.id}`,
+          source: selectedEdge.source,
+          target: newNode.id,
+          type: edgeType,
+          animated: false,
+          style: { strokeWidth: 2, stroke: '#3b82f6' },
+        },
+        {
+          id: `e${newNode.id}-${selectedEdge.target}`,
+          source: newNode.id,
+          target: selectedEdge.target,
+          type: edgeType,
+          animated: true, // Dashed because target is selector
+          style: { strokeWidth: 2, stroke: '#3b82f6' },
+        },
+      ]);
 
-    // Remove the old edge and create two new edges
-    setEdges((eds) => [
-      ...eds.filter(e => e.id !== selectedEdge.id),
-      {
-        id: `e${selectedEdge.source}-${newNode.id}`,
-        source: selectedEdge.source,
+      setSelectedEdges([]);
+      return;
+    }
+
+    // Case 2: Node is selected - add new node after it
+    if (selectedNodes.length === 1) {
+      const sourceNode = nodes.find(n => n.id === selectedNodes[0]);
+      if (!sourceNode) return;
+
+      // Create new selector node positioned to the right of the source
+      const newNode: Node<NodeData> = {
+        id: `node-${nodeId++}`,
+        type: 'selector',
+        position: {
+          x: sourceNode.position.x + 350,
+          y: sourceNode.position.y,
+        },
+        data: {
+          label: 'Select Action',
+          type: 'protocol',
+        },
+      };
+
+      // Add the new node
+      setNodes((nds) => [...nds, newNode]);
+
+      // Create edge from source to new node
+      const newEdge: Edge = {
+        id: `e${sourceNode.id}-${newNode.id}`,
+        source: sourceNode.id,
         target: newNode.id,
         type: edgeType,
-        animated: false,
+        animated: true, // Dashed until selector chooses an action
         style: { strokeWidth: 2, stroke: '#3b82f6' },
-      },
-      {
-        id: `e${newNode.id}-${selectedEdge.target}`,
-        source: newNode.id,
-        target: selectedEdge.target,
-        type: edgeType,
-        animated: true, // Dashed because target is selector
-        style: { strokeWidth: 2, stroke: '#3b82f6' },
-      },
-    ]);
+      };
+      setEdges((eds) => [...eds, newEdge]);
 
-    setSelectedEdges([]);
-  }, [selectedEdges, edges, nodes, setNodes, setEdges, edgeType]);
+      setSelectedNodes([]);
+    }
+  }, [selectedEdges, selectedNodes, edges, nodes, setNodes, setEdges, edgeType]);
 
-  // Handle edge selection to update style and add insert button
+  // Handle selection changes
   const handleSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     const selectedEdgeIds = params.edges.map(e => e.id);
+    const selectedNodeIds = params.nodes.map(n => n.id);
     setSelectedEdges(selectedEdgeIds);
+    setSelectedNodes(selectedNodeIds);
   }, []);
 
   const handleExecute = useCallback(() => {
@@ -288,8 +329,8 @@ function FlowCanvas() {
         isExecuting={isExecuting}
         onDeleteSelected={handleDeleteSelected}
         onInsertNode={handleInsertNode}
-        hasSelection={selectedEdges.length > 0 || nodes.some(n => n.selected)}
-        hasEdgeSelected={selectedEdges.length === 1}
+        hasSelection={selectedEdges.length > 0 || selectedNodes.length > 0}
+        canInsert={selectedEdges.length === 1 || selectedNodes.length === 1}
       />
       <SuccessModal
         isOpen={!!lastResult}

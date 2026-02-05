@@ -11,10 +11,10 @@ interface RightSidebarProps {
   onDeleteSelected: () => void;
   onInsertNode: () => void;
   hasSelection: boolean;
-  hasEdgeSelected: boolean;
+  canInsert: boolean;
 }
 
-export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, hasSelection, hasEdgeSelected }: RightSidebarProps) {
+export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, hasSelection, canInsert }: RightSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Get execution sequence by following edges from wallet node
@@ -57,13 +57,13 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
         {/* Insert Node Button */}
         <button
           onClick={onInsertNode}
-          disabled={!hasEdgeSelected}
+          disabled={!canInsert}
           className={`p-3 rounded-l-lg shadow-lg transition-colors ${
-            hasEdgeSelected
+            canInsert
               ? 'bg-green-600 hover:bg-green-700 text-white'
               : 'bg-gray-400 text-gray-200 cursor-not-allowed'
           }`}
-          title="Insert node between selected edge"
+          title="Add sequence after selected node or insert between selected edge"
         >
           <Plus className="w-5 h-5" />
         </button>
