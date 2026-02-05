@@ -17,6 +17,8 @@ import WalletNode from './nodes/WalletNode';
 import TransferNode from './nodes/TransferNode';
 import SelectorNode from './nodes/SelectorNode';
 import { Sidebar } from './layout/Sidebar';
+import { RightSidebar } from './layout/RightSidebar';
+import { useExecuteSequence } from '@/hooks/useExecuteSequence';
 import type { NodeData } from '@/types';
 
 const nodeTypes: any = {
@@ -48,6 +50,37 @@ function FlowCanvas() {
   const [edgeType, setEdgeType] = useState<'default' | 'straight' | 'step' | 'smoothstep'>('smoothstep');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Execution hook
+  const { executeSequence, isExecuting } = useExecuteSequence();
+
+  const handleExecute = useCallback(() => {
+    // Get execution sequence
+    const walletNode = nodes.find(n => n.type === 'wallet');
+    if (!walletNode) return;
+
+    const sequence: Node<NodeData>[] = [];
+    const visited = new Set<string>();
+
+    const traverse = (nodeId: string) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node || node.type === 'wallet') return;
+      if (node.type === 'selector') return;
+
+      sequence.push(node);
+
+      const outgoingEdges = edges.filter(e => e.source === nodeId);
+      outgoingEdges.forEach(edge => traverse(edge.target));
+    };
+
+    const startEdges = edges.filter(e => e.source === walletNode.id);
+    startEdges.forEach(edge => traverse(edge.target));
+
+    executeSequence(sequence);
+  }, [nodes, edges, executeSequence]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -137,6 +170,12 @@ function FlowCanvas() {
           <Controls />
         </ReactFlow>
       </div>
+      <RightSidebar
+        nodes={nodes}
+        edges={edges}
+        onExecute={handleExecute}
+        isExecuting={isExecuting}
+      />
     </div>
   );
 }
