@@ -1,6 +1,6 @@
-import { memo, useCallback, useMemo, useEffect, useRef } from 'react';
+import { memo, useCallback, useMemo, useEffect, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
-import { Repeat, Plus, AlertTriangle, Loader2, TrendingDown } from 'lucide-react';
+import { Repeat, Plus, AlertTriangle, Loader2, TrendingDown, X } from 'lucide-react';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useSwapQuote } from '@/hooks/useSwapQuote';
@@ -8,6 +8,7 @@ import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import { NodeMenu } from './NodeMenu';
 import type { NodeData } from '@/types';
+import * as Dialog from '@radix-ui/react-dialog';
 
 function SwapNode({ data, id }: NodeProps) {
   const { setNodes } = useReactFlow();
@@ -15,6 +16,7 @@ function SwapNode({ data, id }: NodeProps) {
   const edges = useEdges();
   const nodeData = data as NodeData;
   const account = useCurrentAccount();
+  const [showSettings, setShowSettings] = useState(false);
 
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
@@ -362,17 +364,23 @@ function SwapNode({ data, id }: NodeProps) {
     );
   }, [id, setNodes]);
 
+  const handleSettings = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowSettings(true);
+  }, []);
+
   return (
-    <div className="bg-white dark:bg-gray-800 border-2 border-blue-500 rounded-lg shadow-lg min-w-[280px]">
-      <div className="bg-blue-500 px-3 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Repeat className="w-4 h-4 text-white" />
-          <span className="font-semibold text-white text-sm">
-            {sequenceNumber > 0 && `${sequenceNumber}. `}{nodeData.label}
-          </span>
+    <>
+      <div className="bg-white dark:bg-gray-800 border-2 border-blue-500 rounded-lg shadow-lg min-w-[280px]">
+        <div className="bg-blue-500 px-3 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Repeat className="w-4 h-4 text-white" />
+            <span className="font-semibold text-white text-sm">
+              {sequenceNumber > 0 && `${sequenceNumber}. `}{nodeData.label}
+            </span>
+          </div>
+          <NodeMenu onDelete={handleDelete} onReplace={handleReplace} onSettings={handleSettings} showSettings={true} />
         </div>
-        <NodeMenu onDelete={handleDelete} onReplace={handleReplace} />
-      </div>
 
       <div className="p-4 space-y-3">
         {/* From Asset Selection */}
@@ -488,23 +496,133 @@ function SwapNode({ data, id }: NodeProps) {
         className="!bg-blue-500 !w-3 !h-3"
       />
 
-      {/* Add Sequence button */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex justify-center">
-        <button
-          className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-1 rounded transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            const event = new CustomEvent('addNode', {
-              detail: { sourceNodeId: id }
-            });
-            window.dispatchEvent(event);
-          }}
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Sequence</span>
-        </button>
+        {/* Add Sequence button */}
+        <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex justify-center">
+          <button
+            className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-1 rounded transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              const event = new CustomEvent('addNode', {
+                detail: { sourceNodeId: id }
+              });
+              window.dispatchEvent(event);
+            }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Sequence</span>
+          </button>
+        </div>
       </div>
-    </div>
+
+      {/* Settings Dialog */}
+      <Dialog.Root open={showSettings} onOpenChange={setShowSettings}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 p-6 w-full max-w-md z-50">
+            <div className="flex items-center justify-between mb-4">
+              <Dialog.Title className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                Swap Settings
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                  <X className="w-5 h-5" />
+                </button>
+              </Dialog.Close>
+            </div>
+
+            <div className="space-y-4">
+              {/* Protocol Selection */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  Protocol
+                </label>
+                <select
+                  value={nodeData.swapProtocol || 'cetus'}
+                  onChange={(e) => updateNodeData({ swapProtocol: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
+                >
+                  <option value="cetus">Cetus Aggregator</option>
+                  <option value="turbos" disabled>Turbos (Coming Soon)</option>
+                  <option value="aftermath" disabled>Aftermath (Coming Soon)</option>
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Aggregates best rates from CETUS, BLUEFIN, and FERRADLMM DEXs
+                </p>
+              </div>
+
+              {/* Slippage Tolerance */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  Slippage Tolerance
+                </label>
+                <div className="flex gap-2 mb-2">
+                  {['0.5', '1', '2'].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => updateNodeData({ slippageTolerance: preset })}
+                      className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        (nodeData.slippageTolerance || '1') === preset
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      {preset}%
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    max="50"
+                    value={nodeData.slippageTolerance || '1'}
+                    onChange={(e) => updateNodeData({ slippageTolerance: e.target.value })}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
+                    placeholder="1.0"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-400">%</span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Maximum price movement you're willing to accept
+                </p>
+              </div>
+
+              {/* Transaction Deadline */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  Transaction Deadline
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="60"
+                    value={nodeData.transactionDeadline || '20'}
+                    onChange={(e) => updateNodeData({ transactionDeadline: e.target.value })}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
+                    placeholder="20"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-400">minutes</span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Transaction will revert if not executed within this time
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <Dialog.Close asChild>
+                <button className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium">
+                  Done
+                </button>
+              </Dialog.Close>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   );
 }
 

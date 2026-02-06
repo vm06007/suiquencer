@@ -154,13 +154,19 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
           onClick={onExecute}
           disabled={!hasSequence || isExecuting}
           className={`p-3 rounded-l-lg shadow-lg transition-colors ${
-            hasSequence && !isExecuting
-              ? 'bg-purple-600 hover:bg-purple-700 text-white'
+            hasSequence
+              ? isExecuting
+                ? 'bg-purple-600 text-white cursor-wait'
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
               : 'bg-gray-300 text-gray-500 dark:bg-gray-400 dark:text-gray-200 cursor-not-allowed'
           }`}
-          title="Execute sequence now (no review)"
+          title={isExecuting ? 'Executing...' : 'Execute sequence now (no review)'}
         >
-          <Play className="w-5 h-5" />
+          {isExecuting ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <Play className="w-5 h-5" />
+          )}
         </button>
 
         {/* Toggle Panel Button - review sequence then execute */}

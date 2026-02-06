@@ -18,7 +18,7 @@ export function useFlowFileOperations(
   getNextTabId: () => string
 ) {
   const handleExport = useCallback(() => {
-    const tabName = tabs.find((t) => t.id === activeTabId)?.name || 'My Sequence #1';
+    const tabName = tabs.find((t) => t.id === activeTabId)?.name || 'Suiquence_01';
 
     const sequence = {
       nodes,

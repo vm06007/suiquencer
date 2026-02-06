@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Plus } from 'lucide-react';
+import { Plus, Bridge } from 'lucide-react';
 import type { NodeData } from '@/types';
 import { WalletConnect } from '../WalletConnect';
 
@@ -29,13 +29,12 @@ function WalletNode({ data, id }: NodeProps) {
         className="!bg-blue-500 !w-3 !h-3"
       />
 
-      {/* Add button at the bottom */}
-      <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex justify-center">
+      {/* Add buttons at the bottom */}
+      <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex items-center justify-center gap-2">
         <button
           className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 px-3 py-1 rounded transition-colors"
           onClick={(e) => {
             e.stopPropagation();
-            // This will be handled by the parent Flow component
             const event = new CustomEvent('addNode', {
               detail: { sourceNodeId: id }
             });
@@ -44,6 +43,22 @@ function WalletNode({ data, id }: NodeProps) {
         >
           <Plus className="w-4 h-4" />
           <span>Add Sequence</span>
+        </button>
+
+        <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
+
+        <button
+          className="flex items-center gap-1 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 px-3 py-1 rounded transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            const event = new CustomEvent('addBridge', {
+              detail: { sourceNodeId: id }
+            });
+            window.dispatchEvent(event);
+          }}
+        >
+          <Bridge className="w-4 h-4" />
+          <span>Bridge</span>
         </button>
       </div>
     </div>

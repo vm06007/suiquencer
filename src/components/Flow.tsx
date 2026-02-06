@@ -20,6 +20,8 @@ import SelectorNode from './nodes/SelectorNode';
 import LogicNode from './nodes/LogicNode';
 import LendNode from './nodes/LendNode';
 import CustomNode from './nodes/CustomNode';
+import BridgeNode from './nodes/BridgeNode';
+import EthereumAddressNode from './nodes/EthereumAddressNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
@@ -37,6 +39,8 @@ const nodeTypes: any = {
   logic: LogicNode,
   lend: LendNode,
   custom: CustomNode,
+  bridge: BridgeNode,
+  ethereumAddress: EthereumAddressNode,
 };
 
 // Initial wallet node (not deletable)
@@ -97,7 +101,7 @@ function getInitialWorkspace() {
     tabs: [
       {
         id: '1',
-        name: 'My Sequence #1',
+        name: 'Suiquence_01',
         nodes: initialNodes,
         edges: initialEdges,
       },
@@ -147,18 +151,24 @@ function FlowCanvas() {
     () => `${tabId++}`
   );
 
-  // Handle saving to localStorage
-  const handleSave = useCallback(() => {
-    workspace.saveWorkspaceToLocalStorage();
-    workspace.setHasUnsavedChanges(false);
-    console.log('Workflow saved to memory');
-  }, [workspace]);
+  // Auto-save to localStorage when nodes or edges change (add/remove node, connect edge)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      workspace.saveWorkspaceToLocalStorage();
+      workspace.setHasUnsavedChanges(false);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [nodes, edges, workspace]);
+
+  // No-op for legacy Sidebar prop (save is now automatic)
+  const handleSave = useCallback(() => {}, []);
 
   // Handle creating a new tab (use unique id so tabs never share id after restore/add)
   const handleNewTab = useCallback(() => {
+    const num = workspace.tabs.length + 1;
     const newTab = {
       id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-      name: `My Sequence #${workspace.tabs.length + 1}`,
+      name: `Suiquence_${String(num).padStart(2, '0')}`,
       nodes: initialNodes,
       edges: initialEdges,
     };
@@ -671,7 +681,9 @@ function FlowCanvas() {
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Close tab?</h3>
             <p className="text-gray-600 dark:text-gray-300 text-sm mb-6">
-              You have unsaved changes. Closing this tab will discard them. Are you sure?
+              {workspace.hasUnsavedChanges
+                ? 'You have unsaved changes. Closing this tab will discard them. Are you sure?'
+                : 'Make sure you have saved your changes if you need them. Proceed to close this tab?'}
             </p>
             <div className="flex gap-3 justify-end">
               <button

@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, GitBranch, Moon, Sun, Save, FolderOpen, Upload, Plus, X } from 'lucide-react';
+import { Maximize2, Minimize2, GitBranch, Moon, Sun, Save, FolderOpen, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface Tab {
@@ -13,9 +13,10 @@ interface SidebarProps {
     onEdgeTypeChange: (type: 'default' | 'straight' | 'step' | 'smoothstep') => void;
     isDark: boolean;
     onToggleTheme: () => void;
-    onSave: () => void;
     onLoad: () => void;
     onExport: () => void;
+    /** @deprecated Save is automatic on node/edge changes; kept for compatibility */
+    onSave?: () => void;
     tabs: Tab[];
     activeTabId: string;
     onTabChange: (tabId: string) => void;
@@ -31,9 +32,9 @@ export function Sidebar({
     onEdgeTypeChange,
     isDark,
     onToggleTheme,
-    onSave,
     onLoad,
     onExport,
+    onSave: _onSave,
     tabs,
     activeTabId,
     onTabChange,
@@ -42,6 +43,7 @@ export function Sidebar({
     canCloseTab,
 }: SidebarProps) {
     const [showEdgeMenu, setShowEdgeMenu] = useState(false);
+    const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
 
     return (
         <div className="fixed left-0 top-0 h-screen w-16 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-4 gap-2 z-50">
@@ -55,23 +57,54 @@ export function Sidebar({
             {/* Divider */}
             <div className="w-10 h-px bg-gray-200 dark:bg-gray-700" />
 
-            {/* Tabs Section */}
+            {/* File Operations - icons first (save to localStorage is automatic on node/edge changes) */}
+            <div className="flex flex-col gap-2 py-2">
+                <button
+                    onClick={onLoad}
+                    className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="Load from file"
+                >
+                    <FolderOpen className="w-5 h-5" />
+                </button>
+                <button
+                    onClick={onExport}
+                    className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="Export to file"
+                >
+                    <Save className="w-5 h-5" />
+                </button>
+            </div>
+
+            {/* Divider */}
+            <div className="w-10 h-px bg-gray-200 dark:bg-gray-700" />
+
+            {/* Tabs Section - tabulation of tabs */}
             <div className="flex flex-col gap-2 py-2">
                 {tabs.map((tab, index) => (
-                    <button
+                    <div
                         key={tab.id}
-                        onClick={() => onTabChange(tab.id)}
-                        className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-semibold transition-all ${
-                            activeTabId === tab.id
-                                ? 'bg-blue-600 text-white shadow-lg scale-105'
-                                : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
-                        }`}
-                        title={tab.name}
+                        className="relative flex justify-center"
+                        onMouseEnter={() => setHoveredTabId(tab.id)}
+                        onMouseLeave={() => setHoveredTabId(null)}
                     >
-                        {index + 1}
-                    </button>
+                        <button
+                            onClick={() => onTabChange(tab.id)}
+                            className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-semibold transition-all ${
+                                activeTabId === tab.id
+                                    ? 'bg-blue-600 text-white shadow-lg scale-105'
+                                    : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
+                            }`}
+                            title={tab.name}
+                        >
+                            {index + 1}
+                        </button>
+                        {hoveredTabId === tab.id && (
+                            <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-[60] px-2 py-1.5 rounded bg-gray-900 dark:bg-gray-700 text-white text-xs font-medium whitespace-nowrap shadow-lg pointer-events-none">
+                                {tab.name}
+                            </div>
+                        )}
+                    </div>
                 ))}
-                {/* Add new tab button */}
                 <button
                     onClick={onTabAdd}
                     className="w-10 h-10 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-blue-500 hover:text-blue-500 dark:hover:border-blue-500 dark:hover:text-blue-500 transition-colors"
@@ -79,7 +112,6 @@ export function Sidebar({
                 >
                     <Plus className="w-5 h-5" />
                 </button>
-                {/* Close current tab - below + */}
                 <button
                     onClick={onCloseCurrentTab}
                     disabled={!canCloseTab}
@@ -94,42 +126,11 @@ export function Sidebar({
                 </button>
             </div>
 
-            {/* Divider */}
-            <div className="w-10 h-px bg-gray-200 dark:bg-gray-700" />
+            {/* Spacer - pushes bottom group to the very bottom */}
+            <div className="flex-1" />
 
-            {/* File Operations & Tools */}
-            <div className="flex flex-col gap-2">
-                {/* Save to localStorage */}
-                <button
-                    onClick={onSave}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    title="Save to memory"
-                >
-                    <Save className="w-5 h-5" />
-                </button>
-
-                {/* Load from file */}
-                <button
-                    onClick={onLoad}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    title="Load from file"
-                >
-                    <FolderOpen className="w-5 h-5" />
-                </button>
-
-                {/* Export to file */}
-                <button
-                    onClick={onExport}
-                    className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                    title="Export to file"
-                >
-                    <Upload className="w-5 h-5" />
-                </button>
-
-                {/* Divider */}
-                <div className="w-10 h-px bg-gray-200 dark:bg-gray-700" />
-
-                {/* Edge Style Selector */}
+            {/* Bottom group: Edge Style, Fullscreen, Dark mode - stuck to bottom */}
+            <div className="flex flex-col gap-2 pt-2 border-t border-gray-200 dark:border-gray-700 w-full items-center">
                 <div className="relative">
                     <button
                         onClick={() => setShowEdgeMenu(!showEdgeMenu)}
@@ -138,8 +139,6 @@ export function Sidebar({
                     >
                         <GitBranch className="w-5 h-5" />
                     </button>
-
-                    {/* Dropdown menu */}
                     {showEdgeMenu && (
                         <div className="absolute left-full ml-2 top-0 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 min-w-[140px]">
                             <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 px-2">Edge Style</div>
@@ -162,8 +161,6 @@ export function Sidebar({
                         </div>
                     )}
                 </div>
-
-                {/* Fullscreen Toggle */}
                 <button
                     onClick={onToggleFullscreen}
                     className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
@@ -175,13 +172,6 @@ export function Sidebar({
                         <Maximize2 className="w-5 h-5" />
                     )}
                 </button>
-            </div>
-
-            {/* Spacer to push dark mode to bottom */}
-            <div className="flex-1" />
-
-            {/* Dark mode toggle at bottom */}
-            <div className="pt-2 border-t border-gray-200 dark:border-gray-700 w-full flex justify-center">
                 <button
                     onClick={onToggleTheme}
                     className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"

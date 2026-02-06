@@ -108,14 +108,9 @@ export function useFlowWorkspace(
   const handleTabClose = (tabId: string) => {
     if (tabs.length === 1) return;
 
-    // Show confirmation dialog if there are unsaved changes
-    if (hasUnsavedChanges) {
-      setTabToClose(tabId);
-      setShowTabCloseConfirm(true);
-    } else {
-      // No unsaved changes, close immediately
-      performTabClose(tabId);
-    }
+    // Always ask for confirmation before closing a tab
+    setTabToClose(tabId);
+    setShowTabCloseConfirm(true);
   };
 
   const handleTabCloseConfirm = () => {

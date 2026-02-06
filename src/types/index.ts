@@ -24,6 +24,9 @@ export interface NodeData extends Record<string, unknown> {
   toAsset?: string;
   estimatedAmountOut?: string;
   estimatedAmountOutSymbol?: string;
+  swapProtocol?: string; // cetus, turbos, aftermath
+  slippageTolerance?: string; // percentage (e.g., "1" for 1%)
+  transactionDeadline?: string; // minutes (e.g., "20" for 20 minutes)
   // Logic specific
   logicType?: LogicType;
   // Balance check
@@ -49,6 +52,12 @@ export interface NodeData extends Record<string, unknown> {
   lendAsset?: string; // SUI, USDC, USDT
   lendAmount?: string;
   lendProtocol?: string; // scallop, navi
+  // Bridge specific
+  bridgeChain?: string; // ethereum, polygon, arbitrum, etc.
+  bridgeAsset?: string; // SUI, USDC, USDT
+  bridgeAmount?: string;
+  // Ethereum Address specific
+  ethereumAddress?: string; // 0x... or name.eth
   // Tracking
   amountManuallyEdited?: boolean;
   sequenceNumber?: number;

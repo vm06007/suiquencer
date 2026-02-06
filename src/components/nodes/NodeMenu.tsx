@@ -1,14 +1,16 @@
-import { MoreVertical, Trash2, RotateCcw } from 'lucide-react';
+import { MoreVertical, Trash2, RotateCcw, Settings } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 interface NodeMenuProps {
   onDelete: (e: React.MouseEvent) => void;
   onReplace?: (e: React.MouseEvent) => void;
+  onSettings?: (e: React.MouseEvent) => void;
   showReplace?: boolean;
+  showSettings?: boolean;
   isDark?: boolean;
 }
 
-export function NodeMenu({ onDelete, onReplace, showReplace = true, isDark = true }: NodeMenuProps) {
+export function NodeMenu({ onDelete, onReplace, onSettings, showReplace = true, showSettings = false, isDark = true }: NodeMenuProps) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
@@ -27,6 +29,18 @@ export function NodeMenu({ onDelete, onReplace, showReplace = true, isDark = tru
           className="min-w-[180px] bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-1 z-50"
           sideOffset={5}
         >
+          {showSettings && onSettings && (
+            <DropdownMenu.Item
+              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer outline-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSettings(e as React.MouseEvent);
+              }}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Settings</span>
+            </DropdownMenu.Item>
+          )}
           {showReplace && onReplace && (
             <DropdownMenu.Item
               className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer outline-none"

@@ -11,4 +11,15 @@ export default defineConfig({
       '@mysten/sui': path.resolve(__dirname, 'node_modules/@mysten/sui'),
     },
   },
+  define: {
+    'process.env': {},
+    'global': 'globalThis',
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
+  },
 })
