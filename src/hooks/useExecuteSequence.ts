@@ -7,7 +7,7 @@ import { isValidSuiNSName } from '@mysten/sui/utils';
 import { AggregatorClient, Env } from '@cetusprotocol/aggregator-sdk';
 import { TOKENS } from '@/config/tokens';
 import type { Node } from '@xyflow/react';
-import type { NodeData } from '@/types';
+import type { NodeData, ComparisonOperator } from '@/types';
 
 export function useExecuteSequence() {
   const [isExecuting, setIsExecuting] = useState(false);
@@ -43,8 +43,12 @@ export function useExecuteSequence() {
 
         console.log(`Building atomic transaction with ${sequence.length} operations...`);
 
+        // Track which node indices to skip based on logic conditions
+        const skipIndices = new Set<number>();
+
         // Resolve SuiNS names and validate all steps first
         const resolvedRecipients: Map<number, string> = new Map();
+        const resolvedLogicAddresses: Map<number, string> = new Map();
 
         for (let i = 0; i < sequence.length; i++) {
           const node = sequence[i];
@@ -96,14 +100,121 @@ export function useExecuteSequence() {
             if (fromAsset === toAsset) {
               throw new Error(`Step ${i + 1}: Cannot swap between the same asset`);
             }
+          } else if (node.type === 'logic') {
+            // Validate logic node
+            const logicType = node.data.logicType;
+
+            if (logicType === 'balance') {
+              const address = node.data.balanceAddress;
+              const operator = node.data.comparisonOperator;
+              const compareValue = node.data.compareValue;
+
+              if (!address) {
+                throw new Error(`Step ${i + 1}: Address is required for balance check`);
+              }
+
+              if (!operator) {
+                throw new Error(`Step ${i + 1}: Comparison operator is required`);
+              }
+
+              if (!compareValue) {
+                throw new Error(`Step ${i + 1}: Compare value is required`);
+              }
+
+              // Resolve SuiNS name if needed
+              let resolvedAddress = address;
+              if (isValidSuiNSName(address)) {
+                console.log(`Resolving SuiNS name for logic: ${address}`);
+                try {
+                  const nameRecord = await suinsClient.getNameRecord(address);
+                  if (!nameRecord || !nameRecord.targetAddress) {
+                    throw new Error(`Step ${i + 1}: Failed to resolve SuiNS name "${address}"`);
+                  }
+                  resolvedAddress = nameRecord.targetAddress;
+                  console.log(`Resolved ${address} to ${resolvedAddress}`);
+                } catch (error) {
+                  throw new Error(`Step ${i + 1}: Failed to resolve SuiNS name "${address}"`);
+                }
+              }
+
+              resolvedLogicAddresses.set(i, resolvedAddress);
+
+              // Evaluate the condition
+              try {
+                const balance = await suiClient.getBalance({
+                  owner: resolvedAddress,
+                });
+                const balanceInSui = parseInt(balance.totalBalance) / Math.pow(10, 9);
+                const compareVal = parseFloat(compareValue);
+
+                let conditionMet = false;
+                const op = operator as ComparisonOperator;
+                switch (op) {
+                  case 'gt':
+                    conditionMet = balanceInSui > compareVal;
+                    break;
+                  case 'gte':
+                    conditionMet = balanceInSui >= compareVal;
+                    break;
+                  case 'lt':
+                    conditionMet = balanceInSui < compareVal;
+                    break;
+                  case 'lte':
+                    conditionMet = balanceInSui <= compareVal;
+                    break;
+                  case 'eq':
+                    conditionMet = Math.abs(balanceInSui - compareVal) < 0.0001;
+                    break;
+                  case 'ne':
+                    conditionMet = Math.abs(balanceInSui - compareVal) >= 0.0001;
+                    break;
+                }
+
+                console.log(
+                  `Step ${i + 1}: Logic check - ${balanceInSui} SUI ${operator} ${compareVal} SUI = ${conditionMet}`
+                );
+
+                // If condition is not met, mark all downstream nodes for skipping
+                if (!conditionMet) {
+                  console.log(`Step ${i + 1}: Condition NOT met, skipping downstream nodes`);
+                  // Mark all nodes after this logic node for skipping
+                  for (let j = i + 1; j < sequence.length; j++) {
+                    skipIndices.add(j);
+                  }
+                } else {
+                  console.log(`Step ${i + 1}: Condition met, continuing execution`);
+                }
+              } catch (error) {
+                throw new Error(`Step ${i + 1}: Failed to fetch balance for ${resolvedAddress}`);
+              }
+            } else if (logicType === 'contract') {
+              throw new Error(`Step ${i + 1}: Contract check not yet implemented`);
+            } else {
+              throw new Error(`Step ${i + 1}: Unknown logic type "${logicType}"`);
+            }
           } else {
             throw new Error(`Step ${i + 1}: Node type "${node.type}" not yet implemented`);
           }
         }
 
         // Build all operations into the single transaction block
+        let actualStepCount = 0;
         for (let i = 0; i < sequence.length; i++) {
           const node = sequence[i];
+
+          // Skip nodes that failed logic conditions
+          if (skipIndices.has(i)) {
+            console.log(`Skipping step ${i + 1} due to failed logic condition`);
+            continue;
+          }
+
+          // Skip logic nodes - they don't add operations to the transaction
+          if (node.type === 'logic') {
+            console.log(`Step ${i + 1}: Logic node (no operation added to transaction)`);
+            continue;
+          }
+
+          actualStepCount++;
 
           if (node.type === 'transfer') {
             const amount = parseFloat(node.data.amount || '0');
@@ -255,7 +366,7 @@ export function useExecuteSequence() {
         }
 
         // Execute the entire transaction block atomically (one signature, all or nothing)
-        console.log('Executing atomic transaction block...');
+        console.log(`Executing atomic transaction block with ${actualStepCount} operation(s)...`);
         const result = await signAndExecuteTransaction({
           transaction: tx as any,
         });
@@ -265,10 +376,10 @@ export function useExecuteSequence() {
         // Store the result for the modal
         setLastResult({
           digest: result.digest,
-          stepCount: sequence.length,
+          stepCount: actualStepCount,
         });
 
-        toast.success(`Transaction confirmed (${sequence.length} step${sequence.length === 1 ? '' : 's'})`);
+        toast.success(`Transaction confirmed (${actualStepCount} operation${actualStepCount === 1 ? '' : 's'})`);
         return result;
       } catch (error: any) {
         console.error('Execution failed:', error);

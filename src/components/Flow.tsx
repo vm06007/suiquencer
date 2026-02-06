@@ -17,6 +17,7 @@ import WalletNode from './nodes/WalletNode';
 import TransferNode from './nodes/TransferNode';
 import SwapNode from './nodes/SwapNode';
 import SelectorNode from './nodes/SelectorNode';
+import LogicNode from './nodes/LogicNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
@@ -31,6 +32,7 @@ const nodeTypes: any = {
   transfer: TransferNode,
   swap: SwapNode,
   selector: SelectorNode,
+  logic: LogicNode,
 };
 
 // Initial wallet node (not deletable)
@@ -255,7 +257,7 @@ function FlowCanvas() {
     []
   );
 
-  const handleExecute = useCallback(() => {
+  const handleExecute = useCallback(async () => {
     // Get execution sequence
     const walletNode = nodes.find((n) => n.type === 'wallet');
     if (!walletNode) return;
@@ -263,22 +265,58 @@ function FlowCanvas() {
     const sequence: Node<NodeData>[] = [];
     const visited = new Set<string>();
 
-    const traverse = (nodeId: string) => {
-      if (visited.has(nodeId)) return;
+    const traverse = async (nodeId: string): Promise<boolean> => {
+      if (visited.has(nodeId)) return true;
       visited.add(nodeId);
 
       const node = nodes.find((n) => n.id === nodeId);
-      if (!node || node.type === 'wallet') return;
-      if (node.type === 'selector') return;
+      if (!node || node.type === 'wallet') return true;
+      if (node.type === 'selector') return true;
 
+      // Handle logic nodes - evaluate condition
+      if (node.type === 'logic') {
+        const nodeData = node.data as NodeData;
+
+        // Add logic node to sequence for display in execution modal
+        sequence.push(node as Node<NodeData>);
+
+        // For now, only balance check is implemented
+        if (nodeData.logicType === 'balance') {
+          // Check if we have all required data
+          if (!nodeData.balanceAddress || !nodeData.comparisonOperator || !nodeData.compareValue) {
+            // If incomplete, skip downstream
+            console.log(`Logic node ${node.id}: Incomplete configuration, skipping downstream`);
+            return false;
+          }
+
+          // Downstream nodes will be conditionally added based on the logic evaluation
+          // The actual evaluation happens in useExecuteSequence
+          const outgoingEdges = edges.filter((e) => e.source === nodeId);
+          for (const edge of outgoingEdges) {
+            await traverse(edge.target);
+          }
+          return true;
+        }
+
+        // If logic type not implemented, skip downstream
+        return false;
+      }
+
+      // Regular nodes (transfer, swap)
       sequence.push(node as Node<NodeData>);
 
       const outgoingEdges = edges.filter((e) => e.source === nodeId);
-      outgoingEdges.forEach((edge) => traverse(edge.target));
+      for (const edge of outgoingEdges) {
+        await traverse(edge.target);
+      }
+
+      return true;
     };
 
     const startEdges = edges.filter((e) => e.source === walletNode.id);
-    startEdges.forEach((edge) => traverse(edge.target));
+    for (const edge of startEdges) {
+      await traverse(edge.target);
+    }
 
     executeSequence(sequence);
   }, [nodes, edges, executeSequence]);

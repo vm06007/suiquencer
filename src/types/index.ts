@@ -3,7 +3,11 @@ export type ProtocolType =
   | 'transfer'
   | 'swap'
   | 'stake'
-  | 'nft';
+  | 'nft'
+  | 'logic';
+
+export type ComparisonOperator = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'ne';
+export type LogicType = 'balance' | 'contract';
 
 export interface NodeData extends Record<string, unknown> {
   label: string;
@@ -18,6 +22,11 @@ export interface NodeData extends Record<string, unknown> {
   toAsset?: string;
   estimatedAmountOut?: string;
   estimatedAmountOutSymbol?: string;
+  // Logic specific
+  logicType?: LogicType;
+  balanceAddress?: string;
+  comparisonOperator?: ComparisonOperator;
+  compareValue?: string;
   // Tracking
   amountManuallyEdited?: boolean;
   sequenceNumber?: number;

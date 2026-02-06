@@ -173,48 +173,52 @@ function TransferNode({ data, id }: NodeProps) {
   const balanceWarning = useMemo(() => {
     if (!account) return null;
 
-    // Use effective balance if available, otherwise fallback to wallet balance
-    const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
-    let balanceInToken: number;
-
-    if (effectiveBal && effectiveBalances.length > 0) {
-      balanceInToken = parseFloat(effectiveBal.balance);
-    } else if (balance) {
+    // Get original wallet balance for cumulative checks
+    let walletBalance: number;
+    if (balance) {
       const decimals = TOKENS[selectedAsset].decimals;
-      balanceInToken = parseInt(balance.totalBalance) / Math.pow(10, decimals);
+      walletBalance = parseInt(balance.totalBalance) / Math.pow(10, decimals);
     } else {
       return null;
     }
 
+    // Use effective balance for current amount check
+    const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
+    const effectiveBalance = effectiveBal && effectiveBalances.length > 0
+      ? parseFloat(effectiveBal.balance)
+      : walletBalance;
+
     const currentAmount = parseFloat(nodeData.amount || '0');
     const gasReserve = selectedAsset === 'SUI' ? SUI_GAS_RESERVE : 0;
-    const availableBalance = balanceInToken - gasReserve;
     const displayDecimals = selectedAsset === 'SUI' ? 4 : 2;
 
-    // Check if this individual transfer exceeds available balance
-    if (currentAmount > availableBalance) {
+    // Total available balance (wallet - gas reserve) - used for cumulative checks
+    const totalAvailable = walletBalance - gasReserve;
+
+    // Check if this individual transfer exceeds current effective balance
+    if (currentAmount > effectiveBalance) {
       const message = selectedAsset === 'SUI'
-        ? `Not enough for fees — leave ~${SUI_GAS_RESERVE} SUI for gas. Max send: ${availableBalance.toFixed(displayDecimals)} SUI`
-        : `Exceeds available balance (${balanceInToken.toFixed(displayDecimals)} ${selectedAsset})`;
+        ? `Not enough for fees — leave ~${SUI_GAS_RESERVE} SUI for gas. Available: ${effectiveBalance.toFixed(displayDecimals)} SUI`
+        : `Exceeds available balance (${effectiveBalance.toFixed(displayDecimals)} ${selectedAsset})`;
       return {
         type: 'error' as const,
         message,
       };
     }
 
-    // Check if cumulative amount exceeds balance
-    if (cumulativeAmount > availableBalance) {
+    // Check if cumulative amount exceeds total available (wallet - gas)
+    if (cumulativeAmount > totalAvailable) {
       return {
         type: 'error' as const,
-        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
+        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds available (${totalAvailable.toFixed(displayDecimals)})`,
       };
     }
 
-    // Warning if getting close to balance
-    if (totalAmount > availableBalance) {
+    // Warning if total sequence exceeds available
+    if (totalAmount > totalAvailable) {
       return {
         type: 'warning' as const,
-        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
+        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${selectedAsset}) exceeds available (${totalAvailable.toFixed(displayDecimals)})`,
       };
     }
 
