@@ -18,6 +18,7 @@ import TransferNode from './nodes/TransferNode';
 import SwapNode from './nodes/SwapNode';
 import SelectorNode from './nodes/SelectorNode';
 import LogicNode from './nodes/LogicNode';
+import LendNode from './nodes/LendNode';
 import CustomNode from './nodes/CustomNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
@@ -34,6 +35,7 @@ const nodeTypes: any = {
   swap: SwapNode,
   selector: SelectorNode,
   logic: LogicNode,
+  lend: LendNode,
   custom: CustomNode,
 };
 

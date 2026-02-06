@@ -3,6 +3,7 @@ export type ProtocolType =
   | 'transfer'
   | 'swap'
   | 'stake'
+  | 'lend'
   | 'nft'
   | 'logic'
   | 'custom';
@@ -43,6 +44,11 @@ export interface NodeData extends Record<string, unknown> {
   customFunction?: string;
   customArguments?: string; // JSON array string
   customTypeArguments?: string; // JSON array of type parameters like ["0x2::sui::SUI"]
+  // Lend/Borrow specific
+  lendAction?: string; // deposit, withdraw, borrow, repay
+  lendAsset?: string; // SUI, USDC, USDT
+  lendAmount?: string;
+  lendProtocol?: string; // scallop, navi
   // Tracking
   amountManuallyEdited?: boolean;
   sequenceNumber?: number;

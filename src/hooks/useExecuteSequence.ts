@@ -398,6 +398,24 @@ export function useExecuteSequence() {
                 throw new Error(`Step ${i + 1}: Invalid type arguments JSON`);
               }
             }
+          } else if (node.type === 'lend') {
+            // Validate lend/borrow node
+            const action = node.data.lendAction || 'deposit';
+            const asset = node.data.lendAsset || 'SUI';
+            const amount = parseFloat(node.data.lendAmount || '0');
+            const protocol = node.data.lendProtocol || 'scallop';
+
+            if (amount <= 0) {
+              throw new Error(`Step ${i + 1}: Amount must be greater than 0`);
+            }
+
+            if (protocol !== 'scallop') {
+              throw new Error(`Step ${i + 1}: Only Scallop protocol is supported currently`);
+            }
+
+            if (action !== 'deposit') {
+              throw new Error(`Step ${i + 1}: Only deposit action is supported currently`);
+            }
           } else {
             throw new Error(`Step ${i + 1}: Node type "${node.type}" not yet implemented`);
           }
@@ -648,6 +666,42 @@ export function useExecuteSequence() {
 
             const typeArgsDisplay = typeArguments.length > 0 ? `<${typeArguments.join(', ')}>` : '';
             console.log(`Added step ${i + 1}: Custom contract call ${target}${typeArgsDisplay}`);
+          } else if (node.type === 'lend') {
+            // Execute lend/borrow operation
+            const action = node.data.lendAction || 'deposit';
+            const asset = (node.data.lendAsset || 'SUI') as keyof typeof TOKENS;
+            const amount = parseFloat(node.data.lendAmount || '0');
+            const protocol = node.data.lendProtocol || 'scallop';
+
+            const tokenInfo = TOKENS[asset];
+            const amountInSmallestUnit = Math.floor(amount * Math.pow(10, tokenInfo.decimals));
+
+            if (protocol === 'scallop' && action === 'deposit') {
+              // Scallop deposit (mint)
+              const scallop = {
+                packageId: '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d',
+                version: '0x07871c4b3c847a0f674510d4978d5cf6f960452795e8ff6f189fd2088a3f6ac7',
+                market: '0xa757975255146dc9686aa823b7838b507f315d704f428cbadad2f4ea061939d9',
+                clock: '0x0000000000000000000000000000000000000000000000000000000000000006',
+              };
+
+              // Split coin for deposit
+              const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+
+              // Call mint_entry
+              tx.moveCall({
+                target: `${scallop.packageId}::mint::mint_entry`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(scallop.version),
+                  tx.object(scallop.market),
+                  coin,
+                  tx.object(scallop.clock),
+                ],
+              });
+
+              console.log(`Added step ${i + 1}: Scallop deposit ${amount} ${asset}`);
+            }
           }
         }
 

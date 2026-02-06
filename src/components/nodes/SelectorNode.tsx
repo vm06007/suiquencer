@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react';
-import { Send, Repeat, Coins, Image, Brain, Code } from 'lucide-react';
+import { Send, Repeat, Coins, Image, Brain, Code, Landmark } from 'lucide-react';
 import { NodeMenu } from './NodeMenu';
 import type { ProtocolType, NodeData } from '@/types';
 
@@ -9,6 +9,7 @@ const PROTOCOL_OPTIONS = [
   { value: 'swap', label: 'Swap', icon: Repeat, color: 'blue' },
   { value: 'logic', label: 'Condition', icon: Brain, color: 'purple' },
   { value: 'stake', label: 'Stake', icon: Coins, color: 'pink' },
+  { value: 'lend', label: 'Lend / Borrow', icon: Landmark, color: 'orange' },
   { value: 'custom', label: 'Custom', icon: Code, color: 'gray' },
 ] as const;
 
@@ -85,6 +86,7 @@ function SelectorNode({ id }: NodeProps) {
           const nodeType = protocol === 'transfer' ? 'transfer' :
                           protocol === 'swap' ? 'swap' :
                           protocol === 'logic' ? 'logic' :
+                          protocol === 'lend' ? 'lend' :
                           protocol === 'custom' ? 'custom' :
                           'protocol';
 
@@ -179,6 +181,7 @@ function SelectorNode({ id }: NodeProps) {
               value === 'swap' ? 'hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20' :
               value === 'logic' ? 'hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20' :
               value === 'stake' ? 'hover:border-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20' :
+              value === 'lend' ? 'hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20' :
               'hover:border-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/20'
             }`}
           >
@@ -187,6 +190,7 @@ function SelectorNode({ id }: NodeProps) {
               value === 'swap' ? 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40' :
               value === 'logic' ? 'bg-purple-100 dark:bg-purple-900/30 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/40' :
               value === 'stake' ? 'bg-pink-100 dark:bg-pink-900/30 group-hover:bg-pink-200 dark:group-hover:bg-pink-900/40' :
+              value === 'lend' ? 'bg-orange-100 dark:bg-orange-900/30 group-hover:bg-orange-200 dark:group-hover:bg-orange-900/40' :
               'bg-gray-100 dark:bg-gray-700/30 group-hover:bg-gray-200 dark:group-hover:bg-gray-700/40'
             }`}>
               <Icon className={`w-4 h-4 ${
@@ -194,6 +198,7 @@ function SelectorNode({ id }: NodeProps) {
                 value === 'swap' ? 'text-blue-600 dark:text-blue-400' :
                 value === 'logic' ? 'text-purple-600 dark:text-purple-400' :
                 value === 'stake' ? 'text-pink-600 dark:text-pink-400' :
+                value === 'lend' ? 'text-orange-600 dark:text-orange-400' :
                 'text-gray-600 dark:text-gray-400'
               }`} />
             </div>
@@ -204,6 +209,7 @@ function SelectorNode({ id }: NodeProps) {
                 {value === 'swap' && 'Swap between tokens'}
                 {value === 'logic' && 'Conditional branching'}
                 {value === 'stake' && 'Stake tokens for rewards'}
+                {value === 'lend' && 'Lend tokens or borrow assets'}
                 {value === 'custom' && 'Execute custom contract function'}
               </div>
             </div>
