@@ -30,19 +30,59 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
       visited.add(nodeId);
 
       const node = nodes.find(n => n.id === nodeId);
-      if (!node || node.type === 'wallet') return;
-      if (node.type === 'selector') return; // Skip selector nodes
 
+      // For wallet nodes, sort outgoing edges by position
+      if (!node || node.type === 'wallet') {
+        const outgoingEdges = edges.filter(e => e.source === nodeId);
+        const sortedEdges = outgoingEdges.sort((a, b) => {
+          const targetA = nodes.find(n => n.id === a.target);
+          const targetB = nodes.find(n => n.id === b.target);
+          if (!targetA || !targetB) return 0;
+          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
+            return targetA.position.y - targetB.position.y;
+          }
+          return targetA.position.x - targetB.position.x;
+        });
+        sortedEdges.forEach(edge => traverse(edge.target));
+        return;
+      }
+
+      // Skip selector nodes but traverse their children with sorting
+      if (node.type === 'selector') {
+        const outgoingEdges = edges.filter(e => e.source === nodeId);
+        const sortedEdges = outgoingEdges.sort((a, b) => {
+          const targetA = nodes.find(n => n.id === a.target);
+          const targetB = nodes.find(n => n.id === b.target);
+          if (!targetA || !targetB) return 0;
+          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
+            return targetA.position.y - targetB.position.y;
+          }
+          return targetA.position.x - targetB.position.x;
+        });
+        sortedEdges.forEach(edge => traverse(edge.target));
+        return;
+      }
+
+      // Add this node to sequence
       sequence.push(node);
 
-      // Find outgoing edges
+      // For regular sequence nodes, traverse edges WITHOUT sorting (matches card numbering)
       const outgoingEdges = edges.filter(e => e.source === nodeId);
       outgoingEdges.forEach(edge => traverse(edge.target));
     };
 
-    // Start from wallet's outgoing edges
+    // Start from wallet's outgoing edges, sorted by position
     const startEdges = edges.filter(e => e.source === walletNode.id);
-    startEdges.forEach(edge => traverse(edge.target));
+    const sortedStartEdges = startEdges.sort((a, b) => {
+      const targetA = nodes.find(n => n.id === a.target);
+      const targetB = nodes.find(n => n.id === b.target);
+      if (!targetA || !targetB) return 0;
+      if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
+        return targetA.position.y - targetB.position.y;
+      }
+      return targetA.position.x - targetB.position.x;
+    });
+    sortedStartEdges.forEach(edge => traverse(edge.target));
 
     return sequence;
   };
@@ -152,19 +192,54 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                           {node.data.label}
                         </div>
                         {node.type === 'transfer' && (
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            <span className="text-gray-500">Send:</span>{' '}
+                            <span className="text-green-600 dark:text-green-400 font-mono">
+                              {node.data.amount || '0'} {node.data.asset || 'SUI'}
+                            </span>
+                            {' '}
+                            <span className="text-gray-500">To:</span>{' '}
+                            <span className="text-blue-600 dark:text-blue-400 font-mono truncate">
+                              {node.data.recipientAddress || 'Not set'}
+                            </span>
+                          </div>
+                        )}
+                        {node.type === 'logic' && (
                           <div className="space-y-1">
                             <div className="text-xs text-gray-600 dark:text-gray-400">
-                              <span className="text-gray-500">Send:</span>{' '}
-                              <span className="text-green-600 dark:text-green-400 font-mono">
-                                {node.data.amount || '0'} {node.data.asset || 'SUI'}
+                              <span className="text-gray-500">Type:</span>{' '}
+                              <span className="text-purple-600 dark:text-purple-400 font-medium">
+                                {node.data.logicType === 'balance' ? 'Balance Check' : 'Contract Check'}
                               </span>
                             </div>
-                            <div className="text-xs text-gray-600 dark:text-gray-400">
-                              <span className="text-gray-500">To:</span>{' '}
-                              <span className="text-blue-600 dark:text-blue-400 font-mono truncate block">
-                                {node.data.recipientAddress || 'Not set'}
-                              </span>
-                            </div>
+                            {node.data.logicType === 'balance' && (
+                              <>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500">Address:</span>{' '}
+                                  <span className="text-blue-600 dark:text-blue-400 font-mono">
+                                    {node.data.balanceAddress || 'Not set'}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500">Condition:</span>{' '}
+                                  <span className="text-purple-600 dark:text-purple-400 font-mono">
+                                    {node.data.comparisonOperator === 'gt' ? '>' :
+                                     node.data.comparisonOperator === 'gte' ? '≥' :
+                                     node.data.comparisonOperator === 'lt' ? '<' :
+                                     node.data.comparisonOperator === 'lte' ? '≤' :
+                                     node.data.comparisonOperator === 'eq' ? '=' :
+                                     node.data.comparisonOperator === 'ne' ? '≠' : '?'}
+                                  </span>
+                                  {' '}
+                                  <span className="text-green-600 dark:text-green-400 font-mono">
+                                    {node.data.compareValue || '0'} SUI
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-500 italic">
+                                  Skips downstream if false
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                         {node.type === 'swap' && (

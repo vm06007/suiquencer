@@ -192,7 +192,7 @@ function LogicNode({ data, id }: NodeProps) {
           owner: address,
         });
         const balanceInSui = parseInt(balance.totalBalance) / Math.pow(10, 9);
-        setCurrentBalance(balanceInSui.toFixed(4));
+        setCurrentBalance(balanceInSui.toFixed(2));
       } catch (error) {
         console.error('Failed to fetch balance:', error);
         setBalanceError('Failed to fetch balance');
