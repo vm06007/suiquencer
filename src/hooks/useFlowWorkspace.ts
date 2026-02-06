@@ -126,6 +126,11 @@ export function useFlowWorkspace(
     setShowTabCloseConfirm(false);
   };
 
+  const handleTabCloseCancel = () => {
+    setTabToClose(null);
+    setShowTabCloseConfirm(false);
+  };
+
   return {
     tabs,
     setTabs,
@@ -140,5 +145,6 @@ export function useFlowWorkspace(
     handleTabChange,
     handleTabClose,
     handleTabCloseConfirm,
+    handleTabCloseCancel,
   };
 }

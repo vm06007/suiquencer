@@ -19,8 +19,9 @@ interface SidebarProps {
     tabs: Tab[];
     activeTabId: string;
     onTabChange: (tabId: string) => void;
-    onTabClose: (tabId: string) => void;
     onTabAdd: () => void;
+    onCloseCurrentTab: () => void;
+    canCloseTab: boolean;
 }
 
 export function Sidebar({
@@ -36,11 +37,11 @@ export function Sidebar({
     tabs,
     activeTabId,
     onTabChange,
-    onTabClose,
     onTabAdd,
+    onCloseCurrentTab,
+    canCloseTab,
 }: SidebarProps) {
     const [showEdgeMenu, setShowEdgeMenu] = useState(false);
-    const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
     return (
         <div className="fixed left-0 top-0 h-screen w-16 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-4 gap-2 z-50">
@@ -57,35 +58,18 @@ export function Sidebar({
             {/* Tabs Section */}
             <div className="flex flex-col gap-2 py-2">
                 {tabs.map((tab, index) => (
-                    <div
+                    <button
                         key={tab.id}
-                        className="relative group"
-                        onMouseEnter={() => setHoveredTab(tab.id)}
-                        onMouseLeave={() => setHoveredTab(null)}
+                        onClick={() => onTabChange(tab.id)}
+                        className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-semibold transition-all ${
+                            activeTabId === tab.id
+                                ? 'bg-blue-600 text-white shadow-lg scale-105'
+                                : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
+                        }`}
+                        title={tab.name}
                     >
-                        <button
-                            onClick={() => onTabChange(tab.id)}
-                            className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-semibold transition-all ${
-                                activeTabId === tab.id
-                                    ? 'bg-blue-600 text-white shadow-lg scale-105'
-                                    : 'bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
-                            }`}
-                            title={tab.name}
-                        >
-                            {index + 1}
-                        </button>
-                        {tabs.length > 1 && hoveredTab === tab.id && (
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onTabClose(tab.id);
-                                }}
-                                className="absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white shadow-lg"
-                            >
-                                <X className="w-3 h-3" />
-                            </button>
-                        )}
-                    </div>
+                        {index + 1}
+                    </button>
                 ))}
                 {/* Add new tab button */}
                 <button
@@ -94,6 +78,19 @@ export function Sidebar({
                     title="New sequence"
                 >
                     <Plus className="w-5 h-5" />
+                </button>
+                {/* Close current tab - below + */}
+                <button
+                    onClick={onCloseCurrentTab}
+                    disabled={!canCloseTab}
+                    className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${
+                        canCloseTab
+                            ? 'bg-gray-900 hover:bg-red-600 text-white dark:bg-black dark:hover:bg-red-600'
+                            : 'bg-gray-200 dark:bg-gray-800 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                    }`}
+                    title={canCloseTab ? 'Close current tab' : 'Only one tab open'}
+                >
+                    <X className="w-5 h-5" />
                 </button>
             </div>
 

@@ -68,13 +68,21 @@ function getInitialWorkspace() {
     if (saved) {
       const workspace = JSON.parse(saved);
       if (workspace.tabs && workspace.tabs.length > 0) {
-        const activeTab =
-          workspace.tabs.find((t: any) => t.id === workspace.activeTabId) ||
-          workspace.tabs[0];
+        const seen = new Set<string>();
+        const tabs = workspace.tabs.map((t: any) => {
+          let id = t.id;
+          if (seen.has(id)) {
+            id = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+          }
+          seen.add(id);
+          return { ...t, id };
+        });
+        const activeIndex = workspace.tabs.findIndex((t: any) => t.id === workspace.activeTabId);
+        const activeTab = activeIndex >= 0 ? tabs[activeIndex] : tabs[0];
         console.log('Workspace restored from localStorage');
         return {
-          tabs: workspace.tabs,
-          activeTabId: workspace.activeTabId || workspace.tabs[0].id,
+          tabs,
+          activeTabId: activeTab.id,
           nodes: activeTab.nodes,
           edges: activeTab.edges,
         };
@@ -146,10 +154,10 @@ function FlowCanvas() {
     console.log('Workflow saved to memory');
   }, [workspace]);
 
-  // Handle creating a new tab
+  // Handle creating a new tab (use unique id so tabs never share id after restore/add)
   const handleNewTab = useCallback(() => {
     const newTab = {
-      id: `${tabId++}`,
+      id: `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       name: `My Sequence #${workspace.tabs.length + 1}`,
       nodes: initialNodes,
       edges: initialEdges,
@@ -583,6 +591,22 @@ function FlowCanvas() {
     return () => window.removeEventListener('addNode', handleAddNode);
   }, [nodes, setNodes, setEdges, edgeType]);
 
+  // Tab-close confirm modal: ESC = cancel, Enter = confirm
+  useEffect(() => {
+    if (!workspace.showTabCloseConfirm) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        workspace.handleTabCloseCancel();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        workspace.handleTabCloseConfirm();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [workspace.showTabCloseConfirm, workspace.handleTabCloseCancel, workspace.handleTabCloseConfirm]);
+
   return (
     <div
       ref={containerRef}
@@ -601,8 +625,9 @@ function FlowCanvas() {
         tabs={workspace.tabs}
         activeTabId={workspace.activeTabId}
         onTabChange={workspace.handleTabChange}
-        onTabClose={workspace.handleTabClose}
         onTabAdd={handleNewTab}
+        onCloseCurrentTab={() => workspace.handleTabClose(workspace.activeTabId)}
+        canCloseTab={workspace.tabs.length > 1}
       />
       <div className="w-full h-full pl-16">
         <div className="w-full h-full">
@@ -641,6 +666,30 @@ function FlowCanvas() {
         canInsert={true}
         canDelete={canDelete}
       />
+      {workspace.showTabCloseConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4" onClick={workspace.handleTabCloseCancel}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 relative" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Close tab?</h3>
+            <p className="text-gray-600 dark:text-gray-300 text-sm mb-6">
+              You have unsaved changes. Closing this tab will discard them. Are you sure?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={workspace.handleTabCloseCancel}
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={workspace.handleTabCloseConfirm}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors"
+              >
+                Close tab
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <SuccessModal
         isOpen={!!lastResult}
         onClose={clearResult}
