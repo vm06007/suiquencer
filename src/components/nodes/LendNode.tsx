@@ -5,6 +5,7 @@ import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp
 import { NodeMenu } from './NodeMenu';
 import { TOKENS } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
+import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import type { NodeData } from '@/types';
 
 function LendNode({ data, id }: NodeProps) {
@@ -70,10 +71,9 @@ function LendNode({ data, id }: NodeProps) {
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
 
-  // Calculate sequence number
-  const sequenceNumber = useMemo(() => {
-    return nodeData.sequenceNumber || 0;
-  }, [nodeData.sequenceNumber]);
+  // Get sequence number from shared hook (uses topological sort)
+  const { sequenceMap } = useExecutionSequence();
+  const sequenceNumber = sequenceMap.get(id) || 0;
 
   const updateNodeData = useCallback(
     (updates: Partial<NodeData>) => {

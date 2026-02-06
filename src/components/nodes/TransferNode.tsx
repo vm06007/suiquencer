@@ -8,6 +8,7 @@ import { SuiNSHelper } from '../SuiNSHelper';
 import { NodeMenu } from './NodeMenu';
 import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
+import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import type { NodeData } from '@/types';
 
 function TransferNode({ data, id }: NodeProps) {
@@ -83,18 +84,21 @@ function TransferNode({ data, id }: NodeProps) {
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
 
-  // Calculate sequence number and cumulative amounts (per asset — only sum same token)
-  const { sequenceNumber, cumulativeAmount, totalAmount } = useMemo(() => {
-    const walletNode = nodes.find(n => n.type === 'wallet');
-    if (!walletNode) return { sequenceNumber: 0, cumulativeAmount: 0, totalAmount: 0 };
+  // Get sequence number from shared hook (uses topological sort)
+  const { sequenceMap } = useExecutionSequence();
+  const sequenceNumber = sequenceMap.get(id) || 0;
 
-    let counter = 0;
+  // Calculate cumulative amounts (per asset — only sum same token)
+  const { cumulativeAmount, totalAmount } = useMemo(() => {
+    const walletNode = nodes.find(n => n.type === 'wallet');
+    if (!walletNode) return { cumulativeAmount: 0, totalAmount: 0 };
+
     let cumulative = 0;
     let total = 0;
     let foundThisNode = false;
     const visited = new Set<string>();
 
-    const traverse = (nodeId: string): number | null => {
+    const traverse = (nodeId: string): boolean | null => {
       if (visited.has(nodeId)) return null;
       visited.add(nodeId);
 
@@ -137,7 +141,6 @@ function TransferNode({ data, id }: NodeProps) {
       }
 
       // Sequence node: only count amount for the same asset as this transfer
-      counter++;
       const amount = parseFloat(String(node.data.amount ?? '0'));
       const nodeAsset = node.type === 'transfer'
         ? (node.data.asset || 'SUI')
@@ -153,7 +156,7 @@ function TransferNode({ data, id }: NodeProps) {
 
       if (nodeId === id) {
         foundThisNode = true;
-        return counter;
+        return true;
       }
 
       const outgoing = edges.filter(e => e.source === nodeId);
@@ -166,7 +169,7 @@ function TransferNode({ data, id }: NodeProps) {
     };
 
     traverse(walletNode.id);
-    return { sequenceNumber: counter, cumulativeAmount: cumulative, totalAmount: total };
+    return { cumulativeAmount: cumulative, totalAmount: total };
   }, [id, nodes, edges, selectedAsset]);
 
   // Check balance validation (reserve SUI for gas when transferring native SUI)

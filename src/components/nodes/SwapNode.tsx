@@ -5,6 +5,7 @@ import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useSwapQuote } from '@/hooks/useSwapQuote';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
+import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import { NodeMenu } from './NodeMenu';
 import type { NodeData } from '@/types';
 
@@ -58,18 +59,21 @@ function SwapNode({ data, id }: NodeProps) {
   // Get balance for the from asset (needed for per-asset cumulative)
   const fromAsset = (nodeData.fromAsset || 'SUI') as keyof typeof TOKENS;
 
-  // Calculate sequence number and cumulative amounts (per asset — only sum same token)
-  const { sequenceNumber, cumulativeAmount, totalAmount } = useMemo(() => {
-    const walletNode = nodes.find(n => n.type === 'wallet');
-    if (!walletNode) return { sequenceNumber: 0, cumulativeAmount: 0, totalAmount: 0 };
+  // Get sequence number from shared hook (uses topological sort)
+  const { sequenceMap } = useExecutionSequence();
+  const sequenceNumber = sequenceMap.get(id) || 0;
 
-    let counter = 0;
+  // Calculate cumulative amounts (per asset — only sum same token)
+  const { cumulativeAmount, totalAmount } = useMemo(() => {
+    const walletNode = nodes.find(n => n.type === 'wallet');
+    if (!walletNode) return { cumulativeAmount: 0, totalAmount: 0 };
+
     let cumulative = 0;
     let total = 0;
     let foundThisNode = false;
     const visited = new Set<string>();
 
-    const traverse = (nodeId: string): number | null => {
+    const traverse = (nodeId: string): boolean | null => {
       if (visited.has(nodeId)) return null;
       visited.add(nodeId);
 
@@ -112,7 +116,6 @@ function SwapNode({ data, id }: NodeProps) {
       }
 
       // Sequence node: only count amount that spends the same from-asset as this swap
-      counter++;
       const amount = parseFloat(String(node.data.amount ?? '0'));
       const nodeFromAsset = node.type === 'transfer'
         ? (node.data.asset || 'SUI')
@@ -128,7 +131,7 @@ function SwapNode({ data, id }: NodeProps) {
 
       if (nodeId === id) {
         foundThisNode = true;
-        return counter;
+        return true;
       }
 
       const outgoing = edges.filter(e => e.source === nodeId);
@@ -141,7 +144,7 @@ function SwapNode({ data, id }: NodeProps) {
     };
 
     traverse(walletNode.id);
-    return { sequenceNumber: counter, cumulativeAmount: cumulative, totalAmount: total };
+    return { cumulativeAmount: cumulative, totalAmount: total };
   }, [id, nodes, edges, fromAsset]);
 
   const fromBalance = fromAsset === 'SUI' ? suiBalance : fromAsset === 'USDC' ? usdcBalance : usdtBalance;

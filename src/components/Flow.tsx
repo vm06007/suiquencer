@@ -247,7 +247,24 @@ function FlowCanvas() {
       setEdges((eds) => [...eds, newEdge]);
 
       setSelectedNodes([]);
+      return;
     }
+
+    // Case 3: Nothing is selected - create unconnected node in center
+    const newNode: Node<NodeData> = {
+      id: `node-${nodeId++}`,
+      type: 'selector',
+      position: {
+        x: 400,
+        y: 300,
+      },
+      data: {
+        label: 'Select Action',
+        type: 'protocol',
+      },
+    };
+
+    setNodes((nds) => [...nds, newNode]);
   }, [selectedEdges, selectedNodes, edges, nodes, setNodes, setEdges, edgeType]);
 
   // Handle selection changes
@@ -621,7 +638,7 @@ function FlowCanvas() {
         isExecuting={isExecuting}
         onDeleteSelected={handleDeleteSelected}
         onInsertNode={handleInsertNode}
-        canInsert={selectedEdges.length === 1 || selectedNodes.length === 1}
+        canInsert={true}
         canDelete={canDelete}
       />
       <SuccessModal

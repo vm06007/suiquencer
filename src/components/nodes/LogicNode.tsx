@@ -8,6 +8,7 @@ import { SuiNSHelper } from '../SuiNSHelper';
 import { PackageHelper } from '../PackageHelper';
 import { NodeMenu } from './NodeMenu';
 import { TOKENS } from '@/config/tokens';
+import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import type { NodeData, LogicType, ComparisonOperator } from '@/types';
 
 const LOGIC_TYPES = [
@@ -51,8 +52,11 @@ function LogicNode({ data, id }: NodeProps) {
   const [availableFunctions, setAvailableFunctions] = useState<{name: string, params: string[]}[]>([]);
   const [isLoadingModules, setIsLoadingModules] = useState(false);
 
-  // Calculate sequence number
-  const sequenceNumber = useMemo(() => {
+  // Get sequence number from shared hook (uses topological sort)
+  const { sequenceMap } = useExecutionSequence();
+  const sequenceNumber = sequenceMap.get(id) || 0;
+
+  const sequenceNumber_UNUSED = useMemo(() => {
     const walletNode = nodes.find((n) => n.type === 'wallet');
     if (!walletNode) return 0;
 

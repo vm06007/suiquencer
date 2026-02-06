@@ -4,6 +4,7 @@ import { Code, Loader2, Info } from 'lucide-react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { PackageHelper } from '../PackageHelper';
 import { NodeMenu } from './NodeMenu';
+import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import type { NodeData } from '@/types';
 
 function CustomNode({ data, id }: NodeProps) {
@@ -18,10 +19,9 @@ function CustomNode({ data, id }: NodeProps) {
   const [availableFunctions, setAvailableFunctions] = useState<{name: string, params: string[], isEntry: boolean}[]>([]);
   const [isLoadingModules, setIsLoadingModules] = useState(false);
 
-  // Calculate sequence number
-  const sequenceNumber = useMemo(() => {
-    return nodeData.sequenceNumber || 0;
-  }, [nodeData.sequenceNumber]);
+  // Get sequence number from shared hook (uses topological sort)
+  const { sequenceMap } = useExecutionSequence();
+  const sequenceNumber = sequenceMap.get(id) || 0;
 
   const updateNodeData = useCallback(
     (updates: Partial<NodeData>) => {

@@ -2,6 +2,7 @@ import { Play, List, X, Trash2, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '@/types';
+import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 
 interface RightSidebarProps {
   nodes: Node<NodeData>[];
@@ -17,78 +18,104 @@ interface RightSidebarProps {
 export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, canInsert, canDelete }: RightSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Get execution sequence by following edges from wallet node
-  const getExecutionSequence = () => {
+  // Get execution sequence from shared hook
+  const { sequence: executionSequence } = useExecutionSequence();
+  const hasSequence = executionSequence.length > 0;
+
+  // Old implementation (for reference if needed)
+  const getExecutionSequence_OLD = () => {
     const walletNode = nodes.find(n => n.type === 'wallet');
     if (!walletNode) return [];
 
-    const sequence: Node<NodeData>[] = [];
-    const visited = new Set<string>();
+    // Filter out wallet and selector nodes for execution
+    const executableNodes = nodes.filter(n => n.type !== 'wallet' && n.type !== 'selector');
 
-    const traverse = (nodeId: string) => {
-      if (visited.has(nodeId)) return;
-      visited.add(nodeId);
+    // Build adjacency list and in-degree map
+    const adjList = new Map<string, string[]>();
+    const inDegree = new Map<string, number>();
 
-      const node = nodes.find(n => n.id === nodeId);
-
-      // For wallet nodes, sort outgoing edges by position
-      if (!node || node.type === 'wallet') {
-        const outgoingEdges = edges.filter(e => e.source === nodeId);
-        const sortedEdges = outgoingEdges.sort((a, b) => {
-          const targetA = nodes.find(n => n.id === a.target);
-          const targetB = nodes.find(n => n.id === b.target);
-          if (!targetA || !targetB) return 0;
-          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
-            return targetA.position.y - targetB.position.y;
-          }
-          return targetA.position.x - targetB.position.x;
-        });
-        sortedEdges.forEach(edge => traverse(edge.target));
-        return;
-      }
-
-      // Skip selector nodes but traverse their children with sorting
-      if (node.type === 'selector') {
-        const outgoingEdges = edges.filter(e => e.source === nodeId);
-        const sortedEdges = outgoingEdges.sort((a, b) => {
-          const targetA = nodes.find(n => n.id === a.target);
-          const targetB = nodes.find(n => n.id === b.target);
-          if (!targetA || !targetB) return 0;
-          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
-            return targetA.position.y - targetB.position.y;
-          }
-          return targetA.position.x - targetB.position.x;
-        });
-        sortedEdges.forEach(edge => traverse(edge.target));
-        return;
-      }
-
-      // Add this node to sequence
-      sequence.push(node);
-
-      // For regular sequence nodes, traverse edges WITHOUT sorting (matches card numbering)
-      const outgoingEdges = edges.filter(e => e.source === nodeId);
-      outgoingEdges.forEach(edge => traverse(edge.target));
-    };
-
-    // Start from wallet's outgoing edges, sorted by position
-    const startEdges = edges.filter(e => e.source === walletNode.id);
-    const sortedStartEdges = startEdges.sort((a, b) => {
-      const targetA = nodes.find(n => n.id === a.target);
-      const targetB = nodes.find(n => n.id === b.target);
-      if (!targetA || !targetB) return 0;
-      if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
-        return targetA.position.y - targetB.position.y;
-      }
-      return targetA.position.x - targetB.position.x;
+    executableNodes.forEach(node => {
+      adjList.set(node.id, []);
+      inDegree.set(node.id, 0);
     });
-    sortedStartEdges.forEach(edge => traverse(edge.target));
+
+    // Count incoming edges for each node (skip wallet and selector nodes)
+    edges.forEach(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const targetNode = nodes.find(n => n.id === edge.target);
+
+      // Skip if target is wallet or selector
+      if (!targetNode || targetNode.type === 'wallet' || targetNode.type === 'selector') return;
+
+      // If source is wallet or selector, don't count it as a dependency
+      if (!sourceNode || sourceNode.type === 'wallet' || sourceNode.type === 'selector') {
+        // Node directly connected from wallet/selector has in-degree 0 (already initialized)
+      } else {
+        // Regular edge between executable nodes
+        const neighbors = adjList.get(edge.source) || [];
+        neighbors.push(edge.target);
+        adjList.set(edge.source, neighbors);
+        inDegree.set(edge.target, (inDegree.get(edge.target) || 0) + 1);
+      }
+    });
+
+    // Topological sort (Kahn's algorithm)
+    const sequence: Node<NodeData>[] = [];
+    const queue: string[] = [];
+
+    // Start with nodes that have no dependencies (in-degree 0)
+    inDegree.forEach((degree, nodeId) => {
+      if (degree === 0) {
+        queue.push(nodeId);
+      }
+    });
+
+    // Sort initial queue by position (top to bottom, left to right)
+    queue.sort((a, b) => {
+      const nodeA = nodes.find(n => n.id === a);
+      const nodeB = nodes.find(n => n.id === b);
+      if (!nodeA || !nodeB) return 0;
+      if (Math.abs(nodeA.position.y - nodeB.position.y) > 50) {
+        return nodeA.position.y - nodeB.position.y;
+      }
+      return nodeA.position.x - nodeB.position.x;
+    });
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!;
+      const node = nodes.find(n => n.id === nodeId);
+      if (node) {
+        sequence.push(node);
+      }
+
+      // Reduce in-degree for neighbors
+      const neighbors = adjList.get(nodeId) || [];
+      const newlyReady: string[] = [];
+
+      neighbors.forEach(neighborId => {
+        const newDegree = (inDegree.get(neighborId) || 0) - 1;
+        inDegree.set(neighborId, newDegree);
+        if (newDegree === 0) {
+          newlyReady.push(neighborId);
+        }
+      });
+
+      // Sort newly ready nodes by position before adding to queue
+      newlyReady.sort((a, b) => {
+        const nodeA = nodes.find(n => n.id === a);
+        const nodeB = nodes.find(n => n.id === b);
+        if (!nodeA || !nodeB) return 0;
+        if (Math.abs(nodeA.position.y - nodeB.position.y) > 50) {
+          return nodeA.position.y - nodeB.position.y;
+        }
+        return nodeA.position.x - nodeB.position.x;
+      });
+
+      queue.push(...newlyReady);
+    }
 
     return sequence;
   };
-
-  const executionSequence = getExecutionSequence();
-  const hasSequence = executionSequence.length > 0;
 
   return (
     <>
@@ -103,7 +130,7 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
               ? 'bg-green-600 hover:bg-green-700 text-white'
               : 'bg-gray-300 text-gray-500 dark:bg-gray-400 dark:text-gray-200 cursor-not-allowed'
           }`}
-          title="Add sequence after selected node or insert between selected edge"
+          title="Add node: After selected node, between selected edge, or standalone"
         >
           <Plus className="w-5 h-5" />
         </button>
