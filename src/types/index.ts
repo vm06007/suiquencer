@@ -24,9 +24,18 @@ export interface NodeData extends Record<string, unknown> {
   estimatedAmountOutSymbol?: string;
   // Logic specific
   logicType?: LogicType;
+  // Balance check
   balanceAddress?: string;
+  balanceAsset?: string; // Which token to check (SUI, USDC, USDT)
   comparisonOperator?: ComparisonOperator;
   compareValue?: string;
+  // Contract check
+  contractPackageId?: string;
+  contractModule?: string;
+  contractFunction?: string;
+  contractArguments?: string; // JSON array string
+  contractComparisonOperator?: ComparisonOperator;
+  contractCompareValue?: string;
   // Tracking
   amountManuallyEdited?: boolean;
   sequenceNumber?: number;

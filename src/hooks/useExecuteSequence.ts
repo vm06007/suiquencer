@@ -141,37 +141,41 @@ export function useExecuteSequence() {
 
               // Evaluate the condition
               try {
+                const asset = (node.data.balanceAsset || 'SUI') as keyof typeof TOKENS;
+                const tokenInfo = TOKENS[asset];
+
                 const balance = await suiClient.getBalance({
                   owner: resolvedAddress,
+                  coinType: tokenInfo.coinType,
                 });
-                const balanceInSui = parseInt(balance.totalBalance) / Math.pow(10, 9);
+                const balanceInToken = parseInt(balance.totalBalance) / Math.pow(10, tokenInfo.decimals);
                 const compareVal = parseFloat(compareValue);
 
                 let conditionMet = false;
                 const op = operator as ComparisonOperator;
                 switch (op) {
                   case 'gt':
-                    conditionMet = balanceInSui > compareVal;
+                    conditionMet = balanceInToken > compareVal;
                     break;
                   case 'gte':
-                    conditionMet = balanceInSui >= compareVal;
+                    conditionMet = balanceInToken >= compareVal;
                     break;
                   case 'lt':
-                    conditionMet = balanceInSui < compareVal;
+                    conditionMet = balanceInToken < compareVal;
                     break;
                   case 'lte':
-                    conditionMet = balanceInSui <= compareVal;
+                    conditionMet = balanceInToken <= compareVal;
                     break;
                   case 'eq':
-                    conditionMet = Math.abs(balanceInSui - compareVal) < 0.0001;
+                    conditionMet = Math.abs(balanceInToken - compareVal) < 0.0001;
                     break;
                   case 'ne':
-                    conditionMet = Math.abs(balanceInSui - compareVal) >= 0.0001;
+                    conditionMet = Math.abs(balanceInToken - compareVal) >= 0.0001;
                     break;
                 }
 
                 console.log(
-                  `Step ${i + 1}: Logic check - ${balanceInSui} SUI ${operator} ${compareVal} SUI = ${conditionMet}`
+                  `Step ${i + 1}: Logic check - ${balanceInToken} ${asset} ${operator} ${compareVal} ${asset} = ${conditionMet}`
                 );
 
                 // If condition is not met, mark all downstream nodes for skipping
@@ -188,7 +192,127 @@ export function useExecuteSequence() {
                 throw new Error(`Step ${i + 1}: Failed to fetch balance for ${resolvedAddress}`);
               }
             } else if (logicType === 'contract') {
-              throw new Error(`Step ${i + 1}: Contract check not yet implemented`);
+              // Validate contract check inputs
+              const packageId = node.data.contractPackageId;
+              const module = node.data.contractModule;
+              const func = node.data.contractFunction;
+              const operator = node.data.contractComparisonOperator;
+              const compareValue = node.data.contractCompareValue;
+
+              if (!packageId) {
+                throw new Error(`Step ${i + 1}: Package ID is required for contract check`);
+              }
+
+              if (!module) {
+                throw new Error(`Step ${i + 1}: Module name is required for contract check`);
+              }
+
+              if (!func) {
+                throw new Error(`Step ${i + 1}: Function name is required for contract check`);
+              }
+
+              if (!operator) {
+                throw new Error(`Step ${i + 1}: Comparison operator is required`);
+              }
+
+              if (!compareValue) {
+                throw new Error(`Step ${i + 1}: Compare value is required`);
+              }
+
+              // Evaluate the contract condition
+              try {
+                // Parse arguments if provided
+                let args: any[] = [];
+                if (node.data.contractArguments) {
+                  try {
+                    args = JSON.parse(node.data.contractArguments as string);
+                    if (!Array.isArray(args)) {
+                      throw new Error('Arguments must be a JSON array');
+                    }
+                  } catch (e) {
+                    throw new Error(`Step ${i + 1}: Invalid JSON arguments`);
+                  }
+                }
+
+                // Build transaction to call the view function
+                const inspectTx = new Transaction();
+                inspectTx.moveCall({
+                  target: `${packageId}::${module}::${func}`,
+                  arguments: args.map((arg: any) => {
+                    if (typeof arg === 'string' && arg.startsWith('0x')) {
+                      return inspectTx.object(arg);
+                    }
+                    return inspectTx.pure.u64(arg);
+                  }),
+                });
+
+                // Execute as devInspect to get the value
+                const result = await suiClient.devInspectTransactionBlock({
+                  transactionBlock: inspectTx,
+                  sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
+                });
+
+                if (result.error) {
+                  throw new Error(`Contract call failed: ${result.error}`);
+                }
+
+                if (!result.results || result.results.length === 0) {
+                  throw new Error('No return value from contract');
+                }
+
+                const returnData = result.results[0].returnValues;
+                if (!returnData || returnData.length === 0) {
+                  throw new Error('No return data from contract');
+                }
+
+                // Convert BCS bytes to number (assumes u64)
+                const bytes = returnData[0][0];
+                let contractValue = 0;
+                for (let i = 0; i < Math.min(bytes.length, 8); i++) {
+                  contractValue += bytes[i] * Math.pow(256, i);
+                }
+
+                const compareVal = parseFloat(compareValue);
+
+                let conditionMet = false;
+                const op = operator as ComparisonOperator;
+                switch (op) {
+                  case 'gt':
+                    conditionMet = contractValue > compareVal;
+                    break;
+                  case 'gte':
+                    conditionMet = contractValue >= compareVal;
+                    break;
+                  case 'lt':
+                    conditionMet = contractValue < compareVal;
+                    break;
+                  case 'lte':
+                    conditionMet = contractValue <= compareVal;
+                    break;
+                  case 'eq':
+                    conditionMet = Math.abs(contractValue - compareVal) < 0.0001;
+                    break;
+                  case 'ne':
+                    conditionMet = Math.abs(contractValue - compareVal) >= 0.0001;
+                    break;
+                }
+
+                console.log(
+                  `Step ${i + 1}: Contract check - ${contractValue} ${operator} ${compareVal} = ${conditionMet}`
+                );
+
+                // If condition is not met, mark all downstream nodes for skipping
+                if (!conditionMet) {
+                  console.log(`Step ${i + 1}: Condition NOT met, skipping downstream nodes`);
+                  for (let j = i + 1; j < sequence.length; j++) {
+                    skipIndices.add(j);
+                  }
+                } else {
+                  console.log(`Step ${i + 1}: Condition met, continuing execution`);
+                }
+              } catch (error: any) {
+                throw new Error(`Step ${i + 1}: Failed to check contract: ${error.message}`);
+              }
             } else {
               throw new Error(`Step ${i + 1}: Unknown logic type "${logicType}"`);
             }
@@ -363,6 +487,13 @@ export function useExecuteSequence() {
 
             console.log(`Added step ${i + 1}: Swap ${amount} ${fromAsset} → ${toAsset}`);
           }
+        }
+
+        // Check if all operations were skipped due to logic conditions
+        if (actualStepCount === 0) {
+          console.log('All operations were skipped due to failed logic conditions');
+          toast.error('All operations skipped - logic condition(s) not met');
+          return;
         }
 
         // Execute the entire transaction block atomically (one signature, all or nothing)

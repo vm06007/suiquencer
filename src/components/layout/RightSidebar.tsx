@@ -215,6 +215,12 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                             {node.data.logicType === 'balance' && (
                               <>
                                 <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500">Asset:</span>{' '}
+                                  <span className="text-purple-600 dark:text-purple-400 font-medium">
+                                    {node.data.balanceAsset || 'SUI'}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
                                   <span className="text-gray-500">Address:</span>{' '}
                                   <span className="text-blue-600 dark:text-blue-400 font-mono">
                                     {node.data.balanceAddress || 'Not set'}
@@ -232,7 +238,41 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                                   </span>
                                   {' '}
                                   <span className="text-green-600 dark:text-green-400 font-mono">
-                                    {node.data.compareValue || '0'} SUI
+                                    {node.data.compareValue || '0'} {node.data.balanceAsset || 'SUI'}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-500 italic">
+                                  Skips downstream if false
+                                </div>
+                              </>
+                            )}
+                            {node.data.logicType === 'contract' && (
+                              <>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500">Contract:</span>{' '}
+                                  <span className="text-blue-600 dark:text-blue-400 font-mono text-[10px]">
+                                    {node.data.contractPackageId?.slice(0, 8)}...
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500">Function:</span>{' '}
+                                  <span className="text-blue-600 dark:text-blue-400 font-mono">
+                                    {node.data.contractModule}::{node.data.contractFunction}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="text-gray-500">Condition:</span>{' '}
+                                  <span className="text-purple-600 dark:text-purple-400 font-mono">
+                                    {node.data.contractComparisonOperator === 'gt' ? '>' :
+                                     node.data.contractComparisonOperator === 'gte' ? '≥' :
+                                     node.data.contractComparisonOperator === 'lt' ? '<' :
+                                     node.data.contractComparisonOperator === 'lte' ? '≤' :
+                                     node.data.contractComparisonOperator === 'eq' ? '=' :
+                                     node.data.contractComparisonOperator === 'ne' ? '≠' : '?'}
+                                  </span>
+                                  {' '}
+                                  <span className="text-green-600 dark:text-green-400 font-mono">
+                                    {node.data.contractCompareValue || '0'}
                                   </span>
                                 </div>
                                 <div className="text-xs text-gray-500 italic">

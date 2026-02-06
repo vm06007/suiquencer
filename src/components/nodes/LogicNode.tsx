@@ -5,7 +5,9 @@ import { useSuiClient } from '@mysten/dapp-kit';
 import { isValidSuiAddress, isValidSuiNSName } from '@mysten/sui/utils';
 import { SuinsClient } from '@mysten/suins';
 import { SuiNSHelper } from '../SuiNSHelper';
+import { PackageHelper } from '../PackageHelper';
 import { NodeMenu } from './NodeMenu';
+import { TOKENS } from '@/config/tokens';
 import type { NodeData, LogicType, ComparisonOperator } from '@/types';
 
 const LOGIC_TYPES = [
@@ -38,6 +40,16 @@ function LogicNode({ data, id }: NodeProps) {
     resolvedAddress: string | null;
     isRegisteredButNoAddress?: boolean;
   }>({ isValidating: false, isValid: null, resolvedAddress: null, isRegisteredButNoAddress: false });
+
+  // Contract check state
+  const [currentContractValue, setCurrentContractValue] = useState<string | null>(null);
+  const [isLoadingContract, setIsLoadingContract] = useState(false);
+  const [contractError, setContractError] = useState<string | null>(null);
+
+  // Module discovery state
+  const [availableModules, setAvailableModules] = useState<string[]>([]);
+  const [availableFunctions, setAvailableFunctions] = useState<{name: string, params: string[]}[]>([]);
+  const [isLoadingModules, setIsLoadingModules] = useState(false);
 
   // Calculate sequence number
   const sequenceNumber = useMemo(() => {
@@ -188,11 +200,16 @@ function LogicNode({ data, id }: NodeProps) {
       setIsLoadingBalance(true);
       setBalanceError(null);
       try {
+        const asset = (nodeData.balanceAsset || 'SUI') as keyof typeof TOKENS;
+        const tokenInfo = TOKENS[asset];
+
         const balance = await suiClient.getBalance({
           owner: address,
+          coinType: tokenInfo.coinType,
         });
-        const balanceInSui = parseInt(balance.totalBalance) / Math.pow(10, 9);
-        setCurrentBalance(balanceInSui.toFixed(2));
+        const balanceInToken = parseInt(balance.totalBalance) / Math.pow(10, tokenInfo.decimals);
+        const displayDecimals = asset === 'SUI' ? 4 : 2;
+        setCurrentBalance(balanceInToken.toFixed(displayDecimals));
       } catch (error) {
         console.error('Failed to fetch balance:', error);
         setBalanceError('Failed to fetch balance');
@@ -203,7 +220,204 @@ function LogicNode({ data, id }: NodeProps) {
     };
 
     fetchBalance();
-  }, [nodeData.balanceAddress, suiClient, suinsValidation.resolvedAddress]);
+  }, [nodeData.balanceAddress, nodeData.balanceAsset, suiClient, suinsValidation.resolvedAddress]);
+
+  // Fetch modules when package ID changes
+  useEffect(() => {
+    const packageId = nodeData.contractPackageId?.trim();
+
+    if (!packageId || packageId.length < 10) {
+      setAvailableModules([]);
+      setAvailableFunctions([]);
+      return;
+    }
+
+    const fetchModules = async () => {
+      setIsLoadingModules(true);
+      try {
+        const modules = await suiClient.getNormalizedMoveModulesByPackage({ package: packageId });
+        const moduleNames = Object.keys(modules).sort();
+        setAvailableModules(moduleNames);
+
+        // If a module is already selected, update functions for it
+        if (nodeData.contractModule && modules[nodeData.contractModule]) {
+          const selectedModule = modules[nodeData.contractModule];
+          // Show only view functions (non-entry, read-only functions with return values)
+          const functions = Object.entries(selectedModule.exposedFunctions)
+            .filter(([_, func]: any) => {
+              // Only non-entry functions (view/read-only) with return values
+              return func.isEntry === false && func.return && func.return.length > 0;
+            })
+            .map(([name, func]: any) => ({
+              name,
+              params: func.parameters || [],
+            }));
+          setAvailableFunctions(functions);
+        }
+      } catch (error) {
+        console.error('Failed to fetch modules:', error);
+        setAvailableModules([]);
+        setAvailableFunctions([]);
+      } finally {
+        setIsLoadingModules(false);
+      }
+    };
+
+    const timeoutId = setTimeout(fetchModules, 500); // Debounce
+    return () => clearTimeout(timeoutId);
+  }, [nodeData.contractPackageId, suiClient]);
+
+  // Fetch functions when module changes
+  useEffect(() => {
+    const packageId = nodeData.contractPackageId?.trim();
+    const moduleName = nodeData.contractModule?.trim();
+
+    if (!packageId || !moduleName) {
+      setAvailableFunctions([]);
+      return;
+    }
+
+    const fetchFunctions = async () => {
+      try {
+        const modules = await suiClient.getNormalizedMoveModulesByPackage({ package: packageId });
+        if (modules[moduleName]) {
+          const selectedModule = modules[moduleName];
+          console.log('Module exposed functions:', selectedModule.exposedFunctions);
+
+          // Show only view functions (non-entry, read-only functions)
+          const functions = Object.entries(selectedModule.exposedFunctions)
+            .filter(([_, func]: any) => {
+              // Only non-entry functions (view/read-only) with return values
+              return func.isEntry === false && func.return && func.return.length > 0;
+            })
+            .map(([name, func]: any) => ({
+              name,
+              params: func.parameters || [],
+            }));
+
+          console.log('Available view functions:', functions);
+          setAvailableFunctions(functions);
+        }
+      } catch (error) {
+        console.error('Failed to fetch functions:', error);
+        setAvailableFunctions([]);
+      }
+    };
+
+    fetchFunctions();
+  }, [nodeData.contractModule, nodeData.contractPackageId, suiClient]);
+
+  // Fetch contract value when all fields are valid
+  useEffect(() => {
+    const packageId = nodeData.contractPackageId?.trim();
+    const module = nodeData.contractModule?.trim();
+    const func = nodeData.contractFunction?.trim();
+
+    if (!packageId || !module || !func) {
+      setCurrentContractValue(null);
+      setContractError(null);
+      return;
+    }
+
+    const fetchContractValue = async () => {
+      setIsLoadingContract(true);
+      setContractError(null);
+      try {
+        // Parse arguments if provided
+        let args: any[] = [];
+        if (nodeData.contractArguments?.trim()) {
+          try {
+            args = JSON.parse(nodeData.contractArguments);
+            if (!Array.isArray(args)) {
+              throw new Error('Arguments must be a JSON array');
+            }
+          } catch (e) {
+            setContractError('Invalid JSON arguments');
+            setCurrentContractValue(null);
+            setIsLoadingContract(false);
+            return;
+          }
+        }
+
+        // Build transaction to call the view function
+        const tx = new (await import('@mysten/sui/transactions')).Transaction();
+
+        // Parse and handle different argument types
+        const parsedArgs = args.map((arg: any) => {
+          if (typeof arg === 'string' && arg.startsWith('0x')) {
+            // Handle object arguments - for shared objects like Clock at 0x6
+            if (arg === '0x6' || arg === '0x0000000000000000000000000000000000000000000000000000000000000006') {
+              return tx.sharedObjectRef({
+                objectId: '0x0000000000000000000000000000000000000000000000000000000000000006',
+                initialSharedVersion: 1,
+                mutable: false,
+              });
+            }
+            return tx.object(arg);
+          }
+          // Handle numbers
+          if (typeof arg === 'number') {
+            return tx.pure.u64(arg);
+          }
+          // Handle string numbers
+          if (typeof arg === 'string' && !isNaN(Number(arg))) {
+            return tx.pure.u64(Number(arg));
+          }
+          return tx.pure(arg);
+        });
+
+        // Call the move function - this will be a pure/view function call
+        tx.moveCall({
+          target: `${packageId}::${module}::${func}`,
+          arguments: parsedArgs,
+        });
+
+        // Use devInspectTransactionBlock to execute without sending
+        const result = await suiClient.devInspectTransactionBlock({
+          transactionBlock: tx,
+          sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
+        });
+
+        if (result.error) {
+          throw new Error(result.error);
+        }
+
+        if (!result.results || result.results.length === 0) {
+          throw new Error('No return value from contract');
+        }
+
+        // Parse the return value (assuming it's a number for now)
+        const returnData = result.results[0].returnValues;
+        if (!returnData || returnData.length === 0) {
+          throw new Error('No return data');
+        }
+
+        // Convert BCS bytes to number (simplified - assumes u64)
+        const bytes = returnData[0][0];
+        let value = 0;
+        for (let i = 0; i < Math.min(bytes.length, 8); i++) {
+          value += bytes[i] * Math.pow(256, i);
+        }
+
+        setCurrentContractValue(value.toString());
+      } catch (error: any) {
+        console.error('Failed to fetch contract value:', error);
+        setContractError(error?.message || 'Failed to fetch contract value');
+        setCurrentContractValue(null);
+      } finally {
+        setIsLoadingContract(false);
+      }
+    };
+
+    const timeoutId = setTimeout(fetchContractValue, 1000); // Debounce
+    return () => clearTimeout(timeoutId);
+  }, [
+    nodeData.contractPackageId,
+    nodeData.contractModule,
+    nodeData.contractFunction,
+    nodeData.contractArguments,
+    suiClient,
+  ]);
 
   const updateNodeData = useCallback(
     (updates: Partial<NodeData>) => {
@@ -275,9 +489,17 @@ function LogicNode({ data, id }: NodeProps) {
             onChange={(e) =>
               updateNodeData({
                 logicType: e.target.value as LogicType,
+                // Clear balance check fields
                 balanceAddress: undefined,
                 comparisonOperator: undefined,
                 compareValue: undefined,
+                // Clear contract check fields
+                contractPackageId: undefined,
+                contractModule: undefined,
+                contractFunction: undefined,
+                contractArguments: undefined,
+                contractComparisonOperator: undefined,
+                contractCompareValue: undefined,
               })
             }
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
@@ -293,6 +515,21 @@ function LogicNode({ data, id }: NodeProps) {
         {/* Balance Check UI */}
         {nodeData.logicType === 'balance' && (
           <>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
+                Asset to Check
+              </label>
+              <select
+                value={nodeData.balanceAsset || 'SUI'}
+                onChange={(e) => updateNodeData({ balanceAsset: e.target.value })}
+                className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+              >
+                <option value="SUI">SUI</option>
+                <option value="USDC">USDC</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </div>
+
             <div>
               <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
                 Address (check balance of)
@@ -399,7 +636,7 @@ function LogicNode({ data, id }: NodeProps) {
                 </div>
                 <div>
                   <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
-                    Value (SUI)
+                    Value ({nodeData.balanceAsset || 'SUI'})
                   </label>
                   <input
                     type="text"
@@ -416,16 +653,16 @@ function LogicNode({ data, id }: NodeProps) {
                     {isLoadingBalance ? (
                       <span className="flex items-center gap-1">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Current SUI balance: loading...
+                        Current {nodeData.balanceAsset || 'SUI'} balance: loading...
                       </span>
                     ) : balanceError ? (
                       <span className="text-red-600 dark:text-red-400">
-                        Current SUI balance: {balanceError}
+                        Current {nodeData.balanceAsset || 'SUI'} balance: {balanceError}
                       </span>
                     ) : currentBalance !== null ? (
                       <>
                         <span className="font-mono">
-                          Current SUI balance: {currentBalance} SUI
+                          Current {nodeData.balanceAsset || 'SUI'} balance: {currentBalance} {nodeData.balanceAsset || 'SUI'}
                         </span>
                         <div className="group relative">
                           <Info className="w-3 h-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
@@ -442,11 +679,181 @@ function LogicNode({ data, id }: NodeProps) {
           </>
         )}
 
-        {/* Contract Check UI (placeholder for now) */}
+        {/* Contract Check UI */}
         {nodeData.logicType === 'contract' && (
-          <div className="text-xs text-gray-500 dark:text-gray-400 py-4 text-center">
-            Contract check coming soon...
-          </div>
+          <>
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
+                Package ID
+              </label>
+              <input
+                type="text"
+                value={nodeData.contractPackageId || ''}
+                onChange={(e) => updateNodeData({ contractPackageId: e.target.value })}
+                placeholder="0x... or select from known packages below"
+                className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+              />
+              <PackageHelper onSelectPackage={(packageId) => updateNodeData({ contractPackageId: packageId })} />
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 flex items-center gap-1">
+                Module Name
+                {isLoadingModules && <Loader2 className="w-3 h-3 animate-spin" />}
+              </label>
+              {availableModules.length > 0 ? (
+                <select
+                  value={nodeData.contractModule || ''}
+                  onChange={(e) => updateNodeData({ contractModule: e.target.value, contractFunction: undefined })}
+                  className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+                >
+                  <option value="">Select module...</option>
+                  {availableModules.map((mod) => (
+                    <option key={mod} value={mod}>
+                      {mod}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={nodeData.contractModule || ''}
+                  onChange={(e) => updateNodeData({ contractModule: e.target.value })}
+                  placeholder={isLoadingModules ? "Loading modules..." : "Enter package ID first"}
+                  disabled={isLoadingModules}
+                  className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 disabled:opacity-50"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
+                Function Name (view function)
+              </label>
+              {availableFunctions.length > 0 ? (
+                <select
+                  value={nodeData.contractFunction || ''}
+                  onChange={(e) => updateNodeData({ contractFunction: e.target.value })}
+                  className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+                >
+                  <option value="">Select function...</option>
+                  {availableFunctions.map((func) => (
+                    <option key={func.name} value={func.name}>
+                      {func.name} ({func.params.length} params)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={nodeData.contractFunction || ''}
+                  onChange={(e) => updateNodeData({ contractFunction: e.target.value })}
+                  placeholder={nodeData.contractModule ? "No view functions found" : "Select module first"}
+                  disabled={!nodeData.contractModule}
+                  className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400 disabled:opacity-50"
+                />
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 flex items-center gap-1">
+                Arguments (optional)
+                <div className="group relative">
+                  <Info className="w-3 h-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-10">
+                    JSON array, e.g., ["0x123", 42]
+                  </div>
+                </div>
+              </label>
+              <input
+                type="text"
+                value={nodeData.contractArguments || ''}
+                onChange={(e) => updateNodeData({ contractArguments: e.target.value })}
+                placeholder='["0x...", 123]'
+                className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+              />
+              {nodeData.contractFunction && availableFunctions.length > 0 && (
+                <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {(() => {
+                    const selectedFunc = availableFunctions.find(f => f.name === nodeData.contractFunction);
+                    if (selectedFunc && selectedFunc.params.length > 0) {
+                      return `Expects ${selectedFunc.params.length} parameter${selectedFunc.params.length === 1 ? '' : 's'}`;
+                    }
+                    return 'No parameters required';
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {nodeData.contractPackageId && nodeData.contractModule && nodeData.contractFunction && (
+              <>
+                <div>
+                  <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
+                    Condition
+                  </label>
+                  <select
+                    value={nodeData.contractComparisonOperator || ''}
+                    onChange={(e) =>
+                      updateNodeData({
+                        contractComparisonOperator: e.target.value as ComparisonOperator,
+                      })
+                    }
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+                  >
+                    <option value="">Compare</option>
+                    {COMPARISON_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
+                    Expected Value
+                  </label>
+                  <input
+                    type="text"
+                    value={nodeData.contractCompareValue || ''}
+                    onChange={(e) => updateNodeData({ contractCompareValue: e.target.value })}
+                    placeholder="e.g., 100"
+                    className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+                  />
+                </div>
+
+                {/* Current Contract Value Display */}
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded px-2 py-1.5">
+                  <div className="text-xs text-gray-600 dark:text-gray-300 flex items-center gap-1">
+                    {isLoadingContract ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Current contract value: loading...
+                      </span>
+                    ) : contractError ? (
+                      <span className="text-red-600 dark:text-red-400">
+                        Error: {contractError}
+                      </span>
+                    ) : currentContractValue !== null ? (
+                      <>
+                        <span className="font-mono">
+                          Current contract value: {currentContractValue}
+                        </span>
+                        <div className="group relative">
+                          <Info className="w-3 h-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 cursor-help" />
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-10">
+                            If condition is TRUE, execution proceeds. Otherwise, branch is skipped.
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-gray-500">Enter all fields to fetch value</span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
         )}
       </div>
 
