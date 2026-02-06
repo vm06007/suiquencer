@@ -357,6 +357,47 @@ export function useExecuteSequence() {
             } else {
               throw new Error(`Step ${i + 1}: Unknown logic type "${logicType}"`);
             }
+          } else if (node.type === 'custom') {
+            // Validate custom contract execution
+            const packageId = node.data.customPackageId;
+            const module = node.data.customModule;
+            const func = node.data.customFunction;
+
+            if (!packageId) {
+              throw new Error(`Step ${i + 1}: Package ID is required for custom contract`);
+            }
+
+            if (!module) {
+              throw new Error(`Step ${i + 1}: Module name is required for custom contract`);
+            }
+
+            if (!func) {
+              throw new Error(`Step ${i + 1}: Function name is required for custom contract`);
+            }
+
+            // Parse arguments if provided
+            if (node.data.customArguments) {
+              try {
+                const args = JSON.parse(node.data.customArguments as string);
+                if (!Array.isArray(args)) {
+                  throw new Error(`Step ${i + 1}: Arguments must be a JSON array`);
+                }
+              } catch (e) {
+                throw new Error(`Step ${i + 1}: Invalid JSON arguments`);
+              }
+            }
+
+            // Parse type arguments if provided
+            if (node.data.customTypeArguments) {
+              try {
+                const typeArgs = JSON.parse(node.data.customTypeArguments as string);
+                if (!Array.isArray(typeArgs)) {
+                  throw new Error(`Step ${i + 1}: Type arguments must be a JSON array`);
+                }
+              } catch (e) {
+                throw new Error(`Step ${i + 1}: Invalid type arguments JSON`);
+              }
+            }
           } else {
             throw new Error(`Step ${i + 1}: Node type "${node.type}" not yet implemented`);
           }
@@ -527,6 +568,86 @@ export function useExecuteSequence() {
             tx.transferObjects([outputCoin], account.address);
 
             console.log(`Added step ${i + 1}: Swap ${amount} ${fromAsset} → ${toAsset}`);
+          } else if (node.type === 'custom') {
+            const packageId = node.data.customPackageId!;
+            const module = node.data.customModule!;
+            const func = node.data.customFunction!;
+
+            // Parse arguments if provided
+            let args: any[] = [];
+            if (node.data.customArguments) {
+              args = JSON.parse(node.data.customArguments as string);
+            }
+
+            // Build the moveCall
+            const target = `${packageId}::${module}::${func}`;
+
+            // Convert arguments to proper transaction arguments
+            const txArgs = args.map((arg: any) => {
+              // Handle boolean strings
+              if (arg === 'true' || arg === 'false') {
+                return tx.pure.bool(arg === 'true');
+              }
+
+              // Handle boolean type
+              if (typeof arg === 'boolean') {
+                return tx.pure.bool(arg);
+              }
+
+              // If it's an object reference (starts with 0x), use tx.object()
+              if (typeof arg === 'string' && arg.startsWith('0x')) {
+                return tx.object(arg);
+              }
+
+              // For numbers - split from gas coin (for Coin<T> parameters)
+              if (typeof arg === 'number') {
+                const [coin] = tx.splitCoins(tx.gas, [arg]);
+                return coin;
+              }
+
+              // For numeric strings - split from gas coin (for Coin<T> parameters)
+              if (typeof arg === 'string' && !isNaN(Number(arg)) && arg.trim() !== '') {
+                const amount = Number(arg);
+                const [coin] = tx.splitCoins(tx.gas, [amount]);
+                return coin;
+              }
+
+              // For regular strings
+              if (typeof arg === 'string') {
+                return tx.pure.string(arg);
+              }
+
+              // Default: try pure
+              return tx.pure(arg);
+            });
+
+            // Parse type arguments if provided
+            let typeArguments: string[] = [];
+            if (node.data.customTypeArguments) {
+              try {
+                typeArguments = JSON.parse(node.data.customTypeArguments as string);
+                if (!Array.isArray(typeArguments)) {
+                  throw new Error('Type arguments must be a JSON array');
+                }
+              } catch (e) {
+                throw new Error(`Step ${i + 1}: Invalid type arguments JSON`);
+              }
+            }
+
+            const moveCallConfig: any = {
+              target,
+              arguments: txArgs,
+            };
+
+            // Only add type_arguments if provided
+            if (typeArguments.length > 0) {
+              moveCallConfig.typeArguments = typeArguments;
+            }
+
+            tx.moveCall(moveCallConfig);
+
+            const typeArgsDisplay = typeArguments.length > 0 ? `<${typeArguments.join(', ')}>` : '';
+            console.log(`Added step ${i + 1}: Custom contract call ${target}${typeArgsDisplay}`);
           }
         }
 

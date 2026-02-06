@@ -479,10 +479,10 @@ function LogicNode({ data, id }: NodeProps) {
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Logic Type Selection */}
+        {/* Condition Type Selection */}
         <div>
           <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
-            Logic Type
+            Condition Type
           </label>
           <select
             value={nodeData.logicType || 'balance'}
@@ -693,7 +693,10 @@ function LogicNode({ data, id }: NodeProps) {
                 placeholder="0x... or select from known packages below"
                 className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm font-mono focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
               />
-              <PackageHelper onSelectPackage={(packageId) => updateNodeData({ contractPackageId: packageId })} />
+              <PackageHelper
+                onSelectPackage={(packageId) => updateNodeData({ contractPackageId: packageId })}
+                mode="both"
+              />
             </div>
 
             <div>

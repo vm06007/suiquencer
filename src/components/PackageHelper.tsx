@@ -3,6 +3,7 @@ import { Search, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PackageHelperProps {
   onSelectPackage: (packageId: string) => void;
+  mode?: 'view' | 'entry' | 'both'; // Filter packages by function type
 }
 
 const KNOWN_PACKAGES = [
@@ -11,49 +12,89 @@ const KNOWN_PACKAGES = [
     shortId: '0x2',
     fullId: '0x0000000000000000000000000000000000000000000000000000000000000002',
     description: 'Core Sui system modules (clock, coin, etc.)',
+    goodFor: 'both' as const,
   },
   {
     name: 'Move Standard Library',
     shortId: '0x1',
     fullId: '0x0000000000000000000000000000000000000000000000000000000000000001',
     description: 'Standard Move library (option, vector, etc.)',
+    goodFor: 'both' as const,
   },
   {
-    name: 'USDC',
-    shortId: 'USDC',
-    fullId: '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7',
-    description: 'Native Circle USDC on Sui',
-  },
-  {
-    name: 'USDT',
-    shortId: 'USDT',
-    fullId: '0x375f70cf2ae4c00bf37117d0c85a2c71545e6ee05c4a5c7d282cd66a4504b068',
-    description: 'Native USDT on Sui',
-  },
-  {
-    name: 'Cetus Protocol',
+    name: 'Cetus DEX',
     shortId: 'Cetus',
     fullId: '0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb',
-    description: 'Cetus DEX and pools',
+    description: 'Cetus DEX protocol - swaps and liquidity',
+    goodFor: 'entry' as const,
+  },
+  {
+    name: 'Scallop Protocol',
+    shortId: 'Scallop',
+    fullId: '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d',
+    description: 'Scallop lending/borrowing protocol',
+    goodFor: 'entry' as const,
+  },
+  {
+    name: 'Navi Protocol',
+    shortId: 'Navi',
+    fullId: '0xd899cf7d2b5db716bd2cf55599fb0d5ee38a3061e7b6bb6eebf73fa5bc4c81ca',
+    description: 'Navi lending/borrowing protocol',
+    goodFor: 'entry' as const,
+  },
+  {
+    name: 'Turbos Finance',
+    shortId: 'Turbos',
+    fullId: '0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1',
+    description: 'Turbos DEX - concentrated liquidity',
+    goodFor: 'entry' as const,
+  },
+  {
+    name: 'Kriya DEX',
+    shortId: 'Kriya',
+    fullId: '0xa0eba10b173538c8fecca1dff298e488402cc9ff374f8a12ca7758eebe830b66',
+    description: 'Kriya decentralized exchange',
+    goodFor: 'entry' as const,
   },
   {
     name: 'DeepBook',
     shortId: 'DeepBook',
     fullId: '0x000000000000000000000000000000000000000000000000000000000000dee9',
     description: 'DeepBook order book DEX',
+    goodFor: 'entry' as const,
+  },
+  {
+    name: 'USDC Coin',
+    shortId: 'USDC',
+    fullId: '0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7',
+    description: 'Native Circle USDC on Sui',
+    goodFor: 'view' as const,
+  },
+  {
+    name: 'USDT Coin',
+    shortId: 'USDT',
+    fullId: '0x375f70cf2ae4c00bf37117d0c85a2c71545e6ee05c4a5c7d282cd66a4504b068',
+    description: 'Native USDT on Sui',
+    goodFor: 'view' as const,
   },
 ] as const;
 
-export function PackageHelper({ onSelectPackage }: PackageHelperProps) {
+export function PackageHelper({ onSelectPackage, mode = 'both' }: PackageHelperProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredPackages = KNOWN_PACKAGES.filter(
-    (pkg) =>
+  const filteredPackages = KNOWN_PACKAGES.filter((pkg) => {
+    // Filter by mode first
+    if (mode === 'entry' && pkg.goodFor === 'view') return false;
+    if (mode === 'view' && pkg.goodFor === 'entry') return false;
+
+    // Then filter by search term
+    return (
       pkg.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pkg.shortId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       pkg.description.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    );
+  });
 
   return (
     <div className="mt-2">

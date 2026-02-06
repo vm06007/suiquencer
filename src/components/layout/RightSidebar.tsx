@@ -301,6 +301,22 @@ export function RightSidebar({ nodes, edges, onExecute, isExecuting, onDeleteSel
                             </div>
                           </div>
                         )}
+                        {node.type === 'custom' && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">Contract:</span>{' '}
+                              <span className="text-gray-600 dark:text-gray-400 font-mono text-[10px] truncate">
+                                {node.data.customPackageId?.slice(0, 10) || 'Not set'}...
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">Call:</span>{' '}
+                              <span className="text-gray-600 dark:text-gray-400 font-mono">
+                                {node.data.customModule || '?'}::{node.data.customFunction || '?'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

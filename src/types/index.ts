@@ -4,7 +4,8 @@ export type ProtocolType =
   | 'swap'
   | 'stake'
   | 'nft'
-  | 'logic';
+  | 'logic'
+  | 'custom';
 
 export type ComparisonOperator = 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'ne';
 export type LogicType = 'balance' | 'contract';
@@ -36,6 +37,12 @@ export interface NodeData extends Record<string, unknown> {
   contractArguments?: string; // JSON array string
   contractComparisonOperator?: ComparisonOperator;
   contractCompareValue?: string;
+  // Custom contract execution
+  customPackageId?: string;
+  customModule?: string;
+  customFunction?: string;
+  customArguments?: string; // JSON array string
+  customTypeArguments?: string; // JSON array of type parameters like ["0x2::sui::SUI"]
   // Tracking
   amountManuallyEdited?: boolean;
   sequenceNumber?: number;

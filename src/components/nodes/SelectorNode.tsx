@@ -1,15 +1,15 @@
 import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react';
-import { Send, Repeat, Coins, Image, Brain } from 'lucide-react';
+import { Send, Repeat, Coins, Image, Brain, Code } from 'lucide-react';
 import { NodeMenu } from './NodeMenu';
 import type { ProtocolType, NodeData } from '@/types';
 
 const PROTOCOL_OPTIONS = [
   { value: 'transfer', label: 'Transfer', icon: Send, color: 'green' },
   { value: 'swap', label: 'Swap', icon: Repeat, color: 'blue' },
-  { value: 'logic', label: 'Logic', icon: Brain, color: 'purple' },
-  { value: 'stake', label: 'Stake', icon: Coins, color: 'purple' },
-  { value: 'nft', label: 'NFT', icon: Image, color: 'pink' },
+  { value: 'logic', label: 'Condition', icon: Brain, color: 'purple' },
+  { value: 'stake', label: 'Stake', icon: Coins, color: 'pink' },
+  { value: 'custom', label: 'Custom', icon: Code, color: 'gray' },
 ] as const;
 
 function SelectorNode({ id }: NodeProps) {
@@ -82,7 +82,15 @@ function SelectorNode({ id }: NodeProps) {
       let updatedNodes = nds.map((node) => {
         if (node.id === id) {
           // Change the node type based on selection
-          const nodeType = protocol === 'transfer' ? 'transfer' : protocol === 'swap' ? 'swap' : protocol === 'logic' ? 'logic' : 'protocol';
+          const nodeType = protocol === 'transfer' ? 'transfer' :
+                          protocol === 'swap' ? 'swap' :
+                          protocol === 'logic' ? 'logic' :
+                          protocol === 'custom' ? 'custom' :
+                          'protocol';
+
+          // Get the proper label from PROTOCOL_OPTIONS
+          const protocolOption = PROTOCOL_OPTIONS.find(opt => opt.value === protocol);
+          const label = protocolOption?.label || protocol.charAt(0).toUpperCase() + protocol.slice(1);
 
           return {
             ...node,
@@ -90,7 +98,7 @@ function SelectorNode({ id }: NodeProps) {
             data: {
               ...node.data,
               protocol,
-              label: protocol.charAt(0).toUpperCase() + protocol.slice(1),
+              label,
               // Initialize with defaults or pre-filled values from swap
               asset: protocol === 'transfer' ? (prefillAsset || 'SUI') : undefined,
               amount: protocol === 'transfer' ? (prefillAmount || '') : '',
@@ -170,23 +178,23 @@ function SelectorNode({ id }: NodeProps) {
               value === 'transfer' ? 'hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20' :
               value === 'swap' ? 'hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20' :
               value === 'logic' ? 'hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20' :
-              value === 'stake' ? 'hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20' :
-              'hover:border-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20'
+              value === 'stake' ? 'hover:border-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20' :
+              'hover:border-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/20'
             }`}
           >
             <div className={`p-2 rounded transition-colors ${
               value === 'transfer' ? 'bg-green-100 dark:bg-green-900/30 group-hover:bg-green-200 dark:group-hover:bg-green-900/40' :
               value === 'swap' ? 'bg-blue-100 dark:bg-blue-900/30 group-hover:bg-blue-200 dark:group-hover:bg-blue-900/40' :
               value === 'logic' ? 'bg-purple-100 dark:bg-purple-900/30 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/40' :
-              value === 'stake' ? 'bg-purple-100 dark:bg-purple-900/30 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/40' :
-              'bg-pink-100 dark:bg-pink-900/30 group-hover:bg-pink-200 dark:group-hover:bg-pink-900/40'
+              value === 'stake' ? 'bg-pink-100 dark:bg-pink-900/30 group-hover:bg-pink-200 dark:group-hover:bg-pink-900/40' :
+              'bg-gray-100 dark:bg-gray-700/30 group-hover:bg-gray-200 dark:group-hover:bg-gray-700/40'
             }`}>
               <Icon className={`w-4 h-4 ${
                 value === 'transfer' ? 'text-green-600 dark:text-green-400' :
                 value === 'swap' ? 'text-blue-600 dark:text-blue-400' :
                 value === 'logic' ? 'text-purple-600 dark:text-purple-400' :
-                value === 'stake' ? 'text-purple-600 dark:text-purple-400' :
-                'text-pink-600 dark:text-pink-400'
+                value === 'stake' ? 'text-pink-600 dark:text-pink-400' :
+                'text-gray-600 dark:text-gray-400'
               }`} />
             </div>
             <div className="text-left">
@@ -194,9 +202,9 @@ function SelectorNode({ id }: NodeProps) {
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 {value === 'transfer' && 'Send tokens to an address'}
                 {value === 'swap' && 'Swap between tokens'}
-                {value === 'logic' && 'Conditional branching logic'}
+                {value === 'logic' && 'Conditional branching'}
                 {value === 'stake' && 'Stake tokens for rewards'}
-                {value === 'nft' && 'Mint or transfer NFTs'}
+                {value === 'custom' && 'Execute custom contract function'}
               </div>
             </div>
           </button>

@@ -18,6 +18,7 @@ import TransferNode from './nodes/TransferNode';
 import SwapNode from './nodes/SwapNode';
 import SelectorNode from './nodes/SelectorNode';
 import LogicNode from './nodes/LogicNode';
+import CustomNode from './nodes/CustomNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
@@ -33,6 +34,7 @@ const nodeTypes: any = {
   swap: SwapNode,
   selector: SelectorNode,
   logic: LogicNode,
+  custom: CustomNode,
 };
 
 // Initial wallet node (not deletable)
@@ -505,13 +507,36 @@ function FlowCanvas() {
       const sourceNode = nodes.find((n) => n.id === sourceNodeId);
       if (!sourceNode) return;
 
+      // Find all existing nodes connected to this source
+      const outgoingEdges = edges.filter((e) => e.source === sourceNodeId);
+      const connectedNodeIds = outgoingEdges.map((e) => e.target);
+      const connectedNodes = nodes.filter((n) => connectedNodeIds.includes(n.id));
+
+      // Calculate Y position for the new node (below all existing connected nodes)
+      let newY = sourceNode.position.y;
+      if (connectedNodes.length > 0) {
+        // Find the lowest Y position among connected nodes
+        const maxY = Math.max(...connectedNodes.map((n) => n.position.y));
+        newY = maxY + 200; // Place 200px below the lowest connected node
+      }
+
+      // Generate a truly unique ID by finding the max existing node ID
+      const existingNodeIds = nodes
+        .map((n) => {
+          const match = n.id.match(/node-(\d+)/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter((id) => !isNaN(id));
+      const maxExistingId = existingNodeIds.length > 0 ? Math.max(...existingNodeIds) : 0;
+      const newNodeId = `node-${maxExistingId + 1}`;
+
       // Create a new selector node to the right of the source
       const newNode: Node<NodeData> = {
-        id: `node-${nodeId++}`,
+        id: newNodeId,
         type: 'selector',
         position: {
           x: sourceNode.position.x + 350,
-          y: sourceNode.position.y,
+          y: newY,
         },
         data: {
           label: 'Select Action',
