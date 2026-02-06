@@ -123,7 +123,7 @@ function FlowCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { theme, toggleTheme } = useTheme();
-  const { executeSequence, isExecuting, lastResult, clearResult } = useExecuteSequence();
+  const { executeSequence, isExecuting, lastResult, bridgeStatus, clearResult } = useExecuteSequence();
 
   // Workspace and file operations hooks
   const workspace = useFlowWorkspace(
@@ -767,6 +767,7 @@ function FlowCanvas() {
         stepCount={lastResult?.stepCount || 0}
         network="mainnet"
         hasBridgeOperation={lastResult?.hasBridgeOperation || false}
+        bridgeStatus={bridgeStatus}
       />
     </div>
   );

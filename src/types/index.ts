@@ -58,6 +58,7 @@ export interface NodeData extends Record<string, unknown> {
   bridgeOutputAsset?: string; // Output asset: ETH, USDC, USDT, WBTC, etc.
   bridgeAmount?: string;
   bridgeProtocol?: string; // Destination DeFi protocol: aave, lido, uniswap, compound, none
+  lifiRoute?: any; // Full LI.FI route object from SDK for execution
   // Ethereum Address specific
   ethereumAddress?: string; // 0x... or name.eth
   // Tracking

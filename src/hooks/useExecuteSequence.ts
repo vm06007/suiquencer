@@ -1,18 +1,59 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, createElement } from 'react';
 import toast from 'react-hot-toast';
-import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
+import { useCurrentAccount, useCurrentWallet, useSignAndExecuteTransaction, useSuiClient } from '@mysten/dapp-kit';
 import { Transaction } from '@mysten/sui/transactions';
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
 import { AggregatorClient, Env } from '@cetusprotocol/aggregator-sdk';
+import { executeRoute, getRoutes } from '@lifi/sdk';
 import { TOKENS } from '@/config/tokens';
+import { suiProvider } from '@/config/lifi';
+
+// LI.FI chain/token mappings for re-routing on bridge failure
+const SUI_CHAIN_ID = 9270000000000000;
+const DEST_CHAIN_IDS: Record<string, number> = {
+  ethereum: 1, polygon: 137, arbitrum: 42161, optimism: 10,
+  base: 8453, avalanche: 43114, bsc: 56,
+};
+const SUI_TOKEN_ADDRESSES: Record<string, string> = {
+  SUI: '0x2::sui::SUI',
+  USDC: '0x5d4b302506645c37ff133b98c4b50a5ae14841659738d6d733d59d0d217a93bf::coin::COIN',
+  USDT: '0xc060006111016b8a020ad5b33834984a437aaa7d3c74c18e09a95d48aceab08c::coin::COIN',
+};
+const EVM_TOKEN_ADDRESSES: Record<string, Record<number, string>> = {
+  USDC: { 1: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', 137: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359', 42161: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831', 10: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', 8453: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', 43114: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E', 56: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d' },
+  USDT: { 1: '0xdAC17F958D2ee523a2206206994597C13D831ec7', 137: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 42161: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9', 10: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58', 43114: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7', 56: '0x55d398326f99059fF775485246999027B3197955' },
+  ETH: { 1: '0x0000000000000000000000000000000000000000', 42161: '0x0000000000000000000000000000000000000000', 10: '0x0000000000000000000000000000000000000000', 8453: '0x0000000000000000000000000000000000000000' },
+  WBTC: { 1: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599', 137: '0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6', 42161: '0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f' },
+  DAI: { 1: '0x6B175474E89094C44Da98b954EedeAC495271d0F', 137: '0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063', 42161: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1', 10: '0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1' },
+};
 import type { Node } from '@xyflow/react';
 import type { NodeData, ComparisonOperator } from '@/types';
+
+export interface BridgeProcessInfo {
+  type: string;
+  status: string;
+  txHash?: string;
+  txLink?: string;
+}
+
+export interface BridgeStatus {
+  status: 'signing' | 'pending' | 'bridging' | 'done' | 'failed';
+  processes: BridgeProcessInfo[];
+  tool?: string;
+  fromAsset?: string;
+  toAsset?: string;
+  fromChain?: string;
+  toChain?: string;
+  error?: string;
+}
 
 export function useExecuteSequence() {
   const [isExecuting, setIsExecuting] = useState(false);
   const [lastResult, setLastResult] = useState<{ digest: string; stepCount: number; hasBridgeOperation?: boolean } | null>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const account = useCurrentAccount();
+  const { currentWallet } = useCurrentWallet();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const suiClient = useSuiClient();
   const suinsClient = new SuinsClient({
@@ -45,6 +86,9 @@ export function useExecuteSequence() {
 
         // Track which node indices to skip based on logic conditions
         const skipIndices = new Set<number>();
+
+        // Collect bridge nodes for separate execution via LI.FI SDK
+        const bridgeNodes: Node<NodeData>[] = [];
 
         // Resolve SuiNS names and validate all steps first
         const resolvedRecipients: Map<number, string> = new Map();
@@ -477,6 +521,32 @@ export function useExecuteSequence() {
             continue;
           }
 
+          // Bridge nodes are executed separately via LI.FI SDK, not in the Sui tx
+          if (node.type === 'bridge') {
+            // Validate and collect bridge node (handled after Sui tx below)
+            const lifiRoute = node.data.lifiRoute;
+            const asset = node.data.bridgeAsset || 'SUI';
+            const outputAsset = node.data.bridgeOutputAsset;
+            const chain = node.data.bridgeChain;
+            const ethereumAddress = node.data.ethereumAddress;
+
+            if (!lifiRoute) {
+              throw new Error(`Step ${i + 1}: No LI.FI route found. Please wait for quote to load.`);
+            }
+            if (!lifiRoute.steps?.length) {
+              throw new Error(`Step ${i + 1}: Invalid LI.FI route - no steps found`);
+            }
+
+            console.log(`Step ${i + 1}: Cross-chain bridge via LI.FI (deferred)`);
+            console.log(`  Bridge: ${asset} from Sui -> ${chain}`);
+            console.log(`  Convert: ${asset} -> ${outputAsset}`);
+            console.log(`  Destination: ${ethereumAddress}`);
+            console.log(`  Route Tool: ${lifiRoute.steps[0]?.tool || 'unknown'}`);
+
+            bridgeNodes.push(node);
+            continue;
+          }
+
           actualStepCount++;
 
           if (node.type === 'transfer') {
@@ -741,125 +811,250 @@ export function useExecuteSequence() {
 
               console.log(`Added step ${i + 1}: Scallop deposit ${amount} ${asset}`);
             }
-          } else if (node.type === 'bridge') {
-            // Execute bridge operation
-            const amount = parseFloat(node.data.bridgeAmount || '0');
-            const asset = (node.data.bridgeAsset || 'SUI') as keyof typeof TOKENS;
-            const outputAsset = node.data.bridgeOutputAsset!;
-            const chain = node.data.bridgeChain!;
-            const ethereumAddress = node.data.ethereumAddress!;
-            const protocol = node.data.bridgeProtocol || 'none';
-
-            const tokenInfo = TOKENS[asset];
-            const amountInSmallestUnit = Math.floor(amount * Math.pow(10, tokenInfo.decimals));
-
-            console.log(`Step ${i + 1}: Cross-chain DeFi flow starting...`);
-            console.log(`  📤 Bridge: ${amount} ${asset} from Sui → ${chain}`);
-            console.log(`  🔄 Convert: ${asset} → ${outputAsset}`);
-            if (protocol !== 'none') {
-              console.log(`  🏦 Protocol: ${protocol}`);
-            }
-            console.log(`  📥 Destination: ${ethereumAddress}`);
-
-            // Full production flow:
-            // 1. Bridge assets from Sui → EVM chain (using Wormhole/native bridge)
-            // 2. Use LI.FI to route to optimal DEX/protocol
-            // 3. Execute DeFi action (Aave deposit, Lido stake, etc.)
-
-            // For demo: Transfer to demo address representing bridge lock
-            const BRIDGE_DEMO_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000000';
-
-            if (asset === 'SUI') {
-              const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
-              tx.transferObjects([coin], BRIDGE_DEMO_ADDRESS);
-            } else {
-              const coins = await suiClient.getCoins({
-                owner: account.address,
-                coinType: tokenInfo.coinType,
-              });
-
-              if (!coins.data || coins.data.length === 0) {
-                throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet`);
-              }
-
-              const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-              if (totalBalance < BigInt(amountInSmallestUnit)) {
-                throw new Error(`Step ${i + 1}: Insufficient ${asset} balance`);
-              }
-
-              let remainingAmount = BigInt(amountInSmallestUnit);
-              const selectedCoins: string[] = [];
-              for (const coin of coins.data) {
-                if (remainingAmount <= 0) break;
-                selectedCoins.push(coin.coinObjectId);
-                remainingAmount -= BigInt(coin.balance);
-              }
-
-              if (selectedCoins.length > 1) {
-                const [primaryCoin, ...coinsToMerge] = selectedCoins;
-                tx.mergeCoins(
-                  tx.object(primaryCoin),
-                  coinsToMerge.map(coin => tx.object(coin))
-                );
-                const [coinToTransfer] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
-                tx.transferObjects([coinToTransfer], BRIDGE_DEMO_ADDRESS);
-              } else {
-                const [coinToTransfer] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
-                tx.transferObjects([coinToTransfer], BRIDGE_DEMO_ADDRESS);
-              }
-            }
-
-            console.log(`✓ Step ${i + 1}: Bridge transaction prepared`);
-            console.log(`\n📋 Production Flow:`);
-            console.log(`  1. ✓ Lock ${amount} ${asset} on Sui (this transaction)`);
-            console.log(`  2. ⏳ Bridge relayer transfers to ${chain}`);
-            console.log(`  3. ⏳ LI.FI routes ${asset} → ${outputAsset}`);
-            if (protocol !== 'none') {
-              console.log(`  4. ⏳ Deposit to ${protocol} protocol`);
-            }
-            console.log(`  5. ⏳ Deliver to ${ethereumAddress}\n`);
-
-            // Build descriptive toast message
-            let flowDescription = `${amount} ${asset} → ${outputAsset} on ${chain}`;
-            if (protocol !== 'none') {
-              flowDescription += ` → ${protocol}`;
-            }
-
-            toast.loading(
-              `🌉 Cross-chain flow: ${flowDescription}\n` +
-              `Destination: ${ethereumAddress.slice(0, 6)}...${ethereumAddress.slice(-4)}`,
-              { duration: 6000 }
-            );
           }
         }
 
-        // Check if all operations were skipped due to logic conditions
-        if (actualStepCount === 0) {
+        // Check if all operations were skipped (no Sui ops and no bridge ops)
+        if (actualStepCount === 0 && bridgeNodes.length === 0) {
           console.log('All operations were skipped due to failed logic conditions');
           toast.error('All operations skipped - logic condition(s) not met');
           return;
         }
 
-        // Execute the entire transaction block atomically (one signature, all or nothing)
-        console.log(`Executing atomic transaction block with ${actualStepCount} operation(s)...`);
-        const result = await signAndExecuteTransaction({
-          transaction: tx as any,
-        });
+        // Execute the Sui transaction block if there are non-bridge operations
+        let suiResult: { digest: string } | null = null;
+        if (actualStepCount > 0) {
+          console.log(`Executing atomic transaction block with ${actualStepCount} operation(s)...`);
+          suiResult = await signAndExecuteTransaction({
+            transaction: tx as any,
+          });
+          console.log('Atomic transaction executed successfully:', suiResult);
+          toast.success(`Sui transaction confirmed (${actualStepCount} operation${actualStepCount === 1 ? '' : 's'})`);
+        }
 
-        console.log('Atomic transaction executed successfully:', result);
+        // Execute bridge operations via LI.FI SDK
+        if (bridgeNodes.length > 0) {
+          if (!currentWallet) {
+            throw new Error('Wallet not connected. Please connect your wallet for bridge operations.');
+          }
 
-        // Check if sequence contains bridge operations
-        const hasBridgeOperation = sequence.some(node => node.type === 'bridge');
+          // Inject the connected wallet into the LI.FI Sui provider
+          // Cast needed due to minor version differences between @mysten/wallet-standard packages
+          suiProvider.setOptions({
+            getWallet: async () => currentWallet as any,
+          });
 
-        // Store the result for the modal
+          const totalSteps = actualStepCount + bridgeNodes.length;
+
+          for (const bridgeNode of bridgeNodes) {
+            let activeRoute = bridgeNode.data.lifiRoute;
+            const asset = bridgeNode.data.bridgeAsset || 'SUI';
+            const outputAsset = bridgeNode.data.bridgeOutputAsset || 'USDC';
+            const chain = bridgeNode.data.bridgeChain || 'ethereum';
+            const deniedBridges: string[] = [];
+            const maxRetries = 3;
+
+            console.log(`Executing LI.FI bridge: ${asset} from Sui -> ${chain}...`);
+
+            let sourceTxHash = '';
+            let bridgeCompleted = false;
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+              const currentTool = activeRoute.steps?.[0]?.tool || 'unknown';
+
+              // Initialize/update bridge status
+              setBridgeStatus({
+                status: attempt > 0 ? 'signing' : 'signing',
+                processes: [],
+                tool: currentTool,
+                fromAsset: asset,
+                toAsset: outputAsset,
+                fromChain: 'Sui',
+                toChain: chain,
+              });
+
+              if (attempt > 0) {
+                console.log(`Retry ${attempt}/${maxRetries - 1}: trying bridge tool "${currentTool}" (excluded: ${deniedBridges.join(', ')})`);
+                toast.loading(`Retrying with ${currentTool}...`, { id: 'bridge-exec' });
+              }
+
+              try {
+                await executeRoute(activeRoute, {
+                  updateRouteHook: (updatedRoute) => {
+                    const step = updatedRoute.steps[0];
+                    const processes = step?.execution?.process || [];
+
+                    let derivedStatus: BridgeStatus['status'] = 'signing';
+                    const hasConfirmedTx = processes.some((p: any) => p.txHash);
+                    const hasDone = processes.every((p: any) => p.status === 'DONE');
+                    const hasFailed = processes.some((p: any) => p.status === 'FAILED');
+                    const hasBridging = processes.some((p: any) =>
+                      p.type === 'CROSS_CHAIN' && (p.status === 'PENDING' || p.status === 'DONE')
+                    );
+
+                    if (hasFailed) derivedStatus = 'failed';
+                    else if (hasDone) derivedStatus = 'done';
+                    else if (hasBridging) derivedStatus = 'bridging';
+                    else if (hasConfirmedTx) derivedStatus = 'pending';
+
+                    setBridgeStatus({
+                      status: derivedStatus,
+                      processes: processes.map((p: any) => ({
+                        type: p.type || 'UNKNOWN',
+                        status: p.status || 'UNKNOWN',
+                        txHash: p.txHash,
+                        txLink: p.txLink,
+                      })),
+                      tool: step?.tool,
+                      fromAsset: asset,
+                      toAsset: outputAsset,
+                      fromChain: 'Sui',
+                      toChain: chain,
+                    });
+
+                    if (hasConfirmedTx && !sourceTxHash) {
+                      sourceTxHash = processes.find((p: any) => p.txHash)?.txHash || '';
+                      // Show confirmation toast with LI.FI tracking link
+                      toast.success(
+                        createElement('span', null,
+                          'Bridge signed! ',
+                          createElement('a', {
+                            href: `https://scan.li.fi/tx/${sourceTxHash}`,
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                            style: { color: '#7c3aed', fontWeight: 600, textDecoration: 'underline' },
+                          }, 'Track on LI.FI'),
+                        ),
+                        { duration: 10000, id: 'bridge-confirmed' }
+                      );
+                    }
+
+                    for (const p of processes) {
+                      console.log(`LI.FI [${p.type}]: ${p.status}${p.txHash ? ` tx: ${p.txHash}` : ''}`);
+                    }
+                  },
+                });
+
+                // Success!
+                bridgeCompleted = true;
+                toast.dismiss('bridge-exec');
+                toast.dismiss('bridge-confirmed');
+                setBridgeStatus(prev => prev ? { ...prev, status: 'done' } : null);
+                toast.success(
+                  createElement('span', null,
+                    `Bridge to ${chain} complete! `,
+                    sourceTxHash && createElement('a', {
+                      href: `https://scan.li.fi/tx/${sourceTxHash}`,
+                      target: '_blank',
+                      rel: 'noopener noreferrer',
+                      style: { color: '#7c3aed', fontWeight: 600, textDecoration: 'underline' },
+                    }, 'View on LI.FI'),
+                  ),
+                  { duration: 15000 }
+                );
+                break;
+
+              } catch (error: any) {
+                toast.dismiss('bridge-exec');
+                console.error(`Bridge attempt ${attempt + 1} failed (${currentTool}):`, error);
+
+                const rawMsg = error?.message || error?.cause?.message || '';
+
+                // User rejected - stop immediately
+                if (/user rejected|rejected the request|rejected the transaction/i.test(rawMsg)) {
+                  throw error;
+                }
+
+                // Source tx already went through - can't retry, show tracking
+                if (sourceTxHash) {
+                  setBridgeStatus(prev => prev ? { ...prev, status: 'bridging' } : null);
+                  toast.success('Bridge transaction submitted! Track status on LI.FI Explorer.');
+                  bridgeCompleted = true;
+                  break;
+                }
+
+                // Dry run / simulation failure - try next bridge
+                const isRetryable = rawMsg.includes('Dry run failed') || rawMsg.includes('MoveAbort') || rawMsg.includes('422');
+                if (!isRetryable || attempt >= maxRetries - 1) {
+                  setBridgeStatus(prev => prev ? { ...prev, status: 'failed', error: `All bridge routes failed. Last error: ${currentTool} simulation failed.` } : null);
+                  throw new Error(`Bridge failed after ${attempt + 1} attempt(s). No working route found for ${asset} -> ${outputAsset} on ${chain}. Try a larger amount or different destination chain.`);
+                }
+
+                // Exclude failed bridge and re-route
+                deniedBridges.push(currentTool);
+                console.log(`Excluding ${currentTool}, fetching alternative route...`);
+                toast.loading(`${currentTool} failed, finding alternative route...`, { id: 'bridge-exec' });
+
+                try {
+                  const destChainId = DEST_CHAIN_IDS[chain] || 1;
+                  const fromToken = SUI_TOKEN_ADDRESSES[asset];
+                  const toToken = EVM_TOKEN_ADDRESSES[outputAsset]?.[destChainId];
+                  if (!fromToken || !toToken) {
+                    throw new Error(`No token address for ${!fromToken ? asset : outputAsset}`);
+                  }
+
+                  const fromDecimals = asset === 'SUI' || asset === 'WAL' ? 9 : 6;
+                  const amount = parseFloat(bridgeNode.data.bridgeAmount || '0');
+                  const fromAmount = Math.floor(amount * Math.pow(10, fromDecimals)).toString();
+
+                  // Use destination address from the original route (resolved from ENS during quote fetch)
+                  // The route.toAddress has the resolved 0x address, not the ENS name
+                  let toAddress = activeRoute.toAddress;
+                  if (!toAddress || toAddress === '0x0000000000000000000000000000000000000001') {
+                    // Fallback: try to get from step action
+                    toAddress = activeRoute.steps?.[0]?.action?.toAddress || bridgeNode.data.ethereumAddress || '0x0000000000000000000000000000000000000001';
+                  }
+
+                  const newRoutes = await getRoutes({
+                    fromChainId: SUI_CHAIN_ID,
+                    toChainId: destChainId,
+                    fromTokenAddress: fromToken,
+                    toTokenAddress: toToken,
+                    fromAmount,
+                    fromAddress: account!.address,
+                    toAddress,
+                    options: {
+                      order: 'RECOMMENDED' as const,
+                      denyBridges: deniedBridges,
+                    },
+                  });
+
+                  if (!newRoutes.routes?.length) {
+                    throw new Error('No alternative routes found');
+                  }
+
+                  activeRoute = newRoutes.routes[0];
+                  console.log(`Found alternative route via ${activeRoute.steps[0]?.tool}`);
+                } catch (rerouteError: any) {
+                  toast.dismiss('bridge-exec');
+                  setBridgeStatus(prev => prev ? { ...prev, status: 'failed', error: `No alternative routes available. ${rerouteError.message}` } : null);
+                  throw new Error(`Bridge failed: ${currentTool} simulation failed and no alternative routes found. Try a larger amount or different destination chain.`);
+                }
+              }
+            }
+
+            // Show the modal with bridge tracking
+            setLastResult({
+              digest: suiResult?.digest || sourceTxHash || 'bridge-pending',
+              stepCount: totalSteps,
+              hasBridgeOperation: true,
+            });
+          }
+
+          return suiResult;
+        }
+
+        const totalSteps = actualStepCount;
+
+        // Store the result for the modal (non-bridge case)
         setLastResult({
-          digest: result.digest,
-          stepCount: actualStepCount,
-          hasBridgeOperation,
+          digest: suiResult?.digest || '',
+          stepCount: totalSteps,
+          hasBridgeOperation: false,
         });
 
-        toast.success(`Transaction confirmed (${actualStepCount} operation${actualStepCount === 1 ? '' : 's'})`);
-        return result;
+        toast.success(`Transaction confirmed (${totalSteps} operation${totalSteps === 1 ? '' : 's'})`);
+        return suiResult;
       } catch (error: any) {
         console.error('Execution failed:', error);
         const msg = error?.message ?? '';
@@ -872,13 +1067,14 @@ export function useExecuteSequence() {
         setIsExecuting(false);
       }
     },
-    [account, signAndExecuteTransaction, suiClient]
+    [account, currentWallet, signAndExecuteTransaction, suiClient]
   );
 
   return {
     executeSequence,
     isExecuting,
     lastResult,
-    clearResult: () => setLastResult(null),
+    bridgeStatus,
+    clearResult: () => { setLastResult(null); setBridgeStatus(null); },
   };
 }

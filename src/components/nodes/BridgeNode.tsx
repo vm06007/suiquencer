@@ -5,12 +5,14 @@ import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
 import { normalize } from 'viem/ens';
+import { getRoutes } from '@lifi/sdk';
 import { NodeMenu } from './NodeMenu';
 import { ENSHelper } from '../ENSHelper';
 import { TOKENS } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import type { NodeData } from '@/types';
+import '@/config/lifi'; // Initialize LI.FI config
 
 // LI.FI Chain IDs
 const SUI_CHAIN_ID = '9270000000000000'; // Sui blockchain on LI.FI
@@ -122,6 +124,7 @@ function BridgeNode({ data, id }: NodeProps) {
     estimatedOutputUsd: string;
     gasCosts: string;
     route?: any;
+    lifiRoute?: any; // Full LI.FI route object for execution
   } | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -425,64 +428,66 @@ function BridgeNode({ data, id }: NodeProps) {
           throw new Error('Invalid Ethereum address format');
         }
 
-        // Build LI.FI quote request
-        const params = new URLSearchParams({
-          fromChain: SUI_CHAIN_ID,
-          toChain: destChain.chainId,
-          fromToken: fromTokenAddr,
-          toToken: toTokenAddr,
-          fromAmount: amountInSmallestUnit,
-          fromAddress: account?.address || '0x0000000000000000000000000000000000000000000000000000000000000000',
-          toAddress: toAddress,
-        });
-
-        console.log('📡 Calling LI.FI API...');
-        console.log(`  URL: https://li.quest/v1/quote?${params.toString()}`);
-        console.log(`  From Amount: ${amount} ${fromAsset} (${amountInSmallestUnit} smallest units)`);
+        // Use LI.FI SDK to get routes
+        console.log('📡 Calling LI.FI SDK getRoutes()...');
+        console.log(`  From: ${fromAsset} on Sui (${SUI_CHAIN_ID})`);
+        console.log(`  To: ${toAsset} on ${destChain.name} (${destChain.chainId})`);
+        console.log(`  Amount: ${amount} ${fromAsset} (${amountInSmallestUnit} smallest units)`);
         console.log(`  From Address: ${account?.address?.slice(0, 10)}...`);
         console.log(`  To Address: ${toAddress}`);
 
-        const headers: Record<string, string> = {
-          'Accept': 'application/json',
+        const routesRequest = {
+          fromChainId: parseInt(SUI_CHAIN_ID),
+          toChainId: parseInt(destChain.chainId),
+          fromTokenAddress: fromTokenAddr,
+          toTokenAddress: toTokenAddr,
+          fromAmount: amountInSmallestUnit,
+          fromAddress: account?.address || '0x0000000000000000000000000000000000000000000000000000000000000000',
+          toAddress: toAddress,
+          options: {
+            order: 'RECOMMENDED' as const, // Get best route
+          },
         };
 
-        // Add API key if available
-        const apiKey = import.meta.env.VITE_LIFI_API_KEY;
-        if (apiKey) {
-          headers['x-lifi-api-key'] = apiKey;
+        const routesResult = await getRoutes(routesRequest);
+
+        if (!routesResult.routes || routesResult.routes.length === 0) {
+          throw new Error('No routes found for this bridge operation');
         }
 
-        const response = await fetch(`https://li.quest/v1/quote?${params}`, {
-          headers,
-        });
+        // Get the best (first) route
+        const bestRoute = routesResult.routes[0];
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('❌ LI.FI API error:', response.status, errorText);
-          let errorMsg = `LI.FI API error (${response.status})`;
-          try {
-            const errorJson = JSON.parse(errorText);
-            errorMsg = errorJson.message || errorMsg;
-          } catch (e) {
-            // Error text is not JSON
-          }
-          throw new Error(errorMsg);
-        }
-
-        const quote = await response.json();
-
-        console.log('✅ REAL LI.FI quote received!');
-        console.log('  Output:', quote.estimate.toAmount, 'smallest units');
-        console.log('  USD Value:', quote.estimate.toAmountUSD);
-        console.log('  Gas Cost:', quote.estimate.gasCosts?.[0]?.amountUSD || '0', 'USD');
-        console.log('  Route:', quote.tool);
+        console.log('✅ REAL LI.FI route received from SDK!');
+        console.log('  Output:', bestRoute.toAmount, 'smallest units');
+        console.log('  USD Value:', bestRoute.toAmountUSD);
+        console.log('  Gas Cost:', bestRoute.gasCostUSD || '0', 'USD');
+        console.log('  Tool:', bestRoute.steps[0]?.tool);
+        console.log('  Steps:', bestRoute.steps.length);
 
         setBridgeQuote({
-          estimatedOutput: quote.estimate.toAmount,
-          estimatedOutputUsd: quote.estimate.toAmountUSD,
-          gasCosts: quote.estimate.gasCosts?.[0]?.amountUSD || '0',
-          route: quote,
+          estimatedOutput: bestRoute.toAmount,
+          estimatedOutputUsd: bestRoute.toAmountUSD,
+          gasCosts: bestRoute.gasCostUSD || '0',
+          route: bestRoute,
+          lifiRoute: bestRoute, // Store full route for execution
         });
+
+        // Save route to node data for execution
+        setNodes((nds) =>
+          nds.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  lifiRoute: bestRoute,
+                },
+              };
+            }
+            return node;
+          })
+        );
       } catch (error: any) {
         console.error('Failed to fetch LI.FI quote:', error);
         setQuoteError(error.message || 'Failed to fetch quote');
@@ -495,7 +500,7 @@ function BridgeNode({ data, id }: NodeProps) {
     // Debounce the quote fetch
     const timeoutId = setTimeout(fetchQuote, 800);
     return () => clearTimeout(timeoutId);
-  }, [nodeData.bridgeAmount, selectedAsset, selectedOutputAsset, nodeData.bridgeChain, account]);
+  }, [nodeData.bridgeAmount, selectedAsset, selectedOutputAsset, nodeData.bridgeChain, account, ensValidation.resolvedAddress]);
 
   const handleDelete = useCallback(
     (e: React.MouseEvent) => {

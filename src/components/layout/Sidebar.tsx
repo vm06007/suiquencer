@@ -49,9 +49,7 @@ export function Sidebar({
         <div className="fixed left-0 top-0 h-screen w-16 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-4 gap-2 z-50">
             {/* Logo */}
             <div className="mb-2">
-                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                    <span className="text-white font-bold text-xl">S</span>
-                </div>
+                <img src="/favicon.svg" alt="Suiquencer" className="w-10 h-10 rounded-lg" />
             </div>
 
             {/* Divider */}
