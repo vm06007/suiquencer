@@ -21,7 +21,7 @@ export function useExecuteSequence() {
   });
 
   const executeSequence = useCallback(
-    async (sequence: Node<NodeData>[]) => {
+    async (sequence: Node<NodeData>[], edges: any[]) => {
       if (!account) {
         toast.error('Please connect your wallet first');
         return;
@@ -178,13 +178,33 @@ export function useExecuteSequence() {
                   `Step ${i + 1}: Logic check - ${balanceInToken} ${asset} ${operator} ${compareVal} ${asset} = ${conditionMet}`
                 );
 
-                // If condition is not met, mark all downstream nodes for skipping
+                // If condition is not met, mark only DOWNSTREAM (connected) nodes for skipping
                 if (!conditionMet) {
                   console.log(`Step ${i + 1}: Condition NOT met, skipping downstream nodes`);
-                  // Mark all nodes after this logic node for skipping
-                  for (let j = i + 1; j < sequence.length; j++) {
-                    skipIndices.add(j);
-                  }
+
+                  // Find all nodes downstream of this logic node by traversing edges
+                  const logicNodeId = node.id;
+                  const visited = new Set<string>();
+
+                  const markDownstream = (nodeId: string) => {
+                    if (visited.has(nodeId)) return;
+                    visited.add(nodeId);
+
+                    // Find this node's index in the sequence and mark it for skipping
+                    const nodeIndex = sequence.findIndex(n => n.id === nodeId);
+                    if (nodeIndex > i) { // Only skip nodes after the logic node
+                      skipIndices.add(nodeIndex);
+                      console.log(`  Marking node ${nodeIndex + 1} for skipping (downstream of failed logic)`);
+                    }
+
+                    // Find outgoing edges from this node and recursively mark their targets
+                    const outgoingEdges = edges.filter(e => e.source === nodeId);
+                    outgoingEdges.forEach(edge => markDownstream(edge.target));
+                  };
+
+                  // Start marking from the logic node's immediate children
+                  const outgoingEdges = edges.filter(e => e.source === logicNodeId);
+                  outgoingEdges.forEach(edge => markDownstream(edge.target));
                 } else {
                   console.log(`Step ${i + 1}: Condition met, continuing execution`);
                 }
@@ -301,12 +321,33 @@ export function useExecuteSequence() {
                   `Step ${i + 1}: Contract check - ${contractValue} ${operator} ${compareVal} = ${conditionMet}`
                 );
 
-                // If condition is not met, mark all downstream nodes for skipping
+                // If condition is not met, mark only DOWNSTREAM (connected) nodes for skipping
                 if (!conditionMet) {
                   console.log(`Step ${i + 1}: Condition NOT met, skipping downstream nodes`);
-                  for (let j = i + 1; j < sequence.length; j++) {
-                    skipIndices.add(j);
-                  }
+
+                  // Find all nodes downstream of this logic node by traversing edges
+                  const logicNodeId = node.id;
+                  const visited = new Set<string>();
+
+                  const markDownstream = (nodeId: string) => {
+                    if (visited.has(nodeId)) return;
+                    visited.add(nodeId);
+
+                    // Find this node's index in the sequence and mark it for skipping
+                    const nodeIndex = sequence.findIndex(n => n.id === nodeId);
+                    if (nodeIndex > i) { // Only skip nodes after the logic node
+                      skipIndices.add(nodeIndex);
+                      console.log(`  Marking node ${nodeIndex + 1} for skipping (downstream of failed logic)`);
+                    }
+
+                    // Find outgoing edges from this node and recursively mark their targets
+                    const outgoingEdges = edges.filter(e => e.source === nodeId);
+                    outgoingEdges.forEach(edge => markDownstream(edge.target));
+                  };
+
+                  // Start marking from the logic node's immediate children
+                  const outgoingEdges = edges.filter(e => e.source === logicNodeId);
+                  outgoingEdges.forEach(edge => markDownstream(edge.target));
                 } else {
                   console.log(`Step ${i + 1}: Condition met, continuing execution`);
                 }

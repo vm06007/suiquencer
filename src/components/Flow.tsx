@@ -280,26 +280,35 @@ function FlowCanvas() {
         // Add logic node to sequence for display in execution modal
         sequence.push(node as Node<NodeData>);
 
-        // For now, only balance check is implemented
+        // Handle both balance check and contract check
         if (nodeData.logicType === 'balance') {
           // Check if we have all required data
           if (!nodeData.balanceAddress || !nodeData.comparisonOperator || !nodeData.compareValue) {
             // If incomplete, skip downstream
-            console.log(`Logic node ${node.id}: Incomplete configuration, skipping downstream`);
+            console.log(`Logic node ${node.id}: Incomplete balance check configuration, skipping downstream`);
             return false;
           }
-
-          // Downstream nodes will be conditionally added based on the logic evaluation
-          // The actual evaluation happens in useExecuteSequence
-          const outgoingEdges = edges.filter((e) => e.source === nodeId);
-          for (const edge of outgoingEdges) {
-            await traverse(edge.target);
+        } else if (nodeData.logicType === 'contract') {
+          // Check if we have all required data
+          if (!nodeData.contractPackageId || !nodeData.contractModule || !nodeData.contractFunction ||
+              !nodeData.contractComparisonOperator || !nodeData.contractCompareValue) {
+            // If incomplete, skip downstream
+            console.log(`Logic node ${node.id}: Incomplete contract check configuration, skipping downstream`);
+            return false;
           }
-          return true;
+        } else {
+          // Unknown logic type, skip downstream
+          console.log(`Logic node ${node.id}: Unknown logic type, skipping downstream`);
+          return false;
         }
 
-        // If logic type not implemented, skip downstream
-        return false;
+        // Downstream nodes will be conditionally added based on the logic evaluation
+        // The actual evaluation happens in useExecuteSequence
+        const outgoingEdges = edges.filter((e) => e.source === nodeId);
+        for (const edge of outgoingEdges) {
+          await traverse(edge.target);
+        }
+        return true;
       }
 
       // Regular nodes (transfer, swap)
@@ -318,7 +327,7 @@ function FlowCanvas() {
       await traverse(edge.target);
     }
 
-    executeSequence(sequence);
+    executeSequence(sequence, edges);
   }, [nodes, edges, executeSequence]);
 
   const handleDeleteSelected = useCallback(() => {
