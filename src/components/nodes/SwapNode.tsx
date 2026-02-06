@@ -4,6 +4,7 @@ import { Repeat, Plus, AlertTriangle, Loader2, TrendingDown } from 'lucide-react
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useSwapQuote } from '@/hooks/useSwapQuote';
+import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import { NodeMenu } from './NodeMenu';
 import type { NodeData } from '@/types';
 
@@ -13,6 +14,9 @@ function SwapNode({ data, id }: NodeProps) {
   const edges = useEdges();
   const nodeData = data as NodeData;
   const account = useCurrentAccount();
+
+  // Get effective balances (wallet balance + effects of previous operations)
+  const { effectiveBalances } = useEffectiveBalances(id, true);
 
   // Track previous outgoing edges to detect when connections change
   const prevOutgoingEdgesRef = useRef<string>('');
@@ -144,41 +148,59 @@ function SwapNode({ data, id }: NodeProps) {
 
   // Check balance validation for from asset (reserve SUI for gas when spending native SUI)
   const balanceWarning = useMemo(() => {
-    if (!fromBalance || !account) return null;
+    if (!account) return null;
 
-    const decimals = TOKENS[fromAsset].decimals;
-    const balanceInToken = parseInt(fromBalance.totalBalance) / Math.pow(10, decimals);
+    // Get original wallet balance for cumulative checks
+    let walletBalance: number;
+    if (fromBalance) {
+      const decimals = TOKENS[fromAsset].decimals;
+      walletBalance = parseInt(fromBalance.totalBalance) / Math.pow(10, decimals);
+    } else {
+      return null;
+    }
+
+    // Use effective balance for current amount check
+    const effectiveBal = effectiveBalances.find(b => b.symbol === fromAsset);
+    const effectiveBalance = effectiveBal && effectiveBalances.length > 0
+      ? parseFloat(effectiveBal.balance)
+      : walletBalance;
+
     const currentAmount = parseFloat(nodeData.amount || '0');
     const gasReserve = fromAsset === 'SUI' ? SUI_GAS_RESERVE : 0;
-    const availableBalance = balanceInToken - gasReserve;
     const displayDecimals = fromAsset === 'SUI' ? 4 : 2;
 
-    if (currentAmount > availableBalance) {
+    // Total available balance (wallet - gas reserve) - used for cumulative checks
+    const totalAvailable = walletBalance - gasReserve;
+
+    // Check if this individual swap exceeds current effective balance
+    if (currentAmount > effectiveBalance) {
       const message = fromAsset === 'SUI'
-        ? `Not enough for fees — leave ~${SUI_GAS_RESERVE} SUI for gas. Max swap: ${availableBalance.toFixed(displayDecimals)} SUI`
-        : `Exceeds wallet balance (${balanceInToken.toFixed(displayDecimals)} ${fromAsset})`;
+        ? `Not enough for fees — leave ~${SUI_GAS_RESERVE} SUI for gas. Available: ${effectiveBalance.toFixed(displayDecimals)} SUI`
+        : `Exceeds available balance (${effectiveBalance.toFixed(displayDecimals)} ${fromAsset})`;
       return {
         type: 'error' as const,
         message,
       };
     }
 
-    if (cumulativeAmount > availableBalance) {
+    // Check if cumulative amount exceeds total available (wallet - gas)
+    if (cumulativeAmount > totalAvailable) {
       return {
         type: 'error' as const,
-        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
+        message: `Cumulative total (${cumulativeAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available (${totalAvailable.toFixed(displayDecimals)})`,
       };
     }
 
-    if (totalAmount > availableBalance) {
+    // Warning if total sequence exceeds available
+    if (totalAmount > totalAvailable) {
       return {
         type: 'warning' as const,
-        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available (${availableBalance.toFixed(displayDecimals)})`,
+        message: `Total sequence (${totalAmount.toFixed(displayDecimals)} ${fromAsset}) exceeds available (${totalAvailable.toFixed(displayDecimals)})`,
       };
     }
 
     return null;
-  }, [fromBalance, account, nodeData.amount, cumulativeAmount, totalAmount, fromAsset]);
+  }, [fromBalance, account, nodeData.amount, cumulativeAmount, totalAmount, fromAsset, effectiveBalances]);
 
   // Fetch real-time swap quote
   const swapQuote = useSwapQuote(
@@ -189,6 +211,13 @@ function SwapNode({ data, id }: NodeProps) {
   );
 
   const formatBalanceForDropdown = (tokenKey: keyof typeof TOKENS) => {
+    const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
+    if (effectiveBal && effectiveBalances.length > 0) {
+      const amount = parseFloat(effectiveBal.balance);
+      const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+      return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
+    }
+    // Fallback to wallet balance
     const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : usdtBalance;
     if (!tokenBalance) return tokenKey;
     const decimals = TOKENS[tokenKey].decimals;

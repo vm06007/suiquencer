@@ -8,7 +8,7 @@ interface SuiNSHelperProps {
 // Real registered SuiNS names with addresses configured
 // Note: You can use either @name or name.sui format
 const COMMON_NAMES = [
-  '@joythedog',
+  '@satoshi',
   'kartik.sui',
   '@kartik',
   '@surflux',
