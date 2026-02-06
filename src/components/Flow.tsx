@@ -21,7 +21,6 @@ import LogicNode from './nodes/LogicNode';
 import LendNode from './nodes/LendNode';
 import CustomNode from './nodes/CustomNode';
 import BridgeNode from './nodes/BridgeNode';
-import EthereumAddressNode from './nodes/EthereumAddressNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
@@ -40,7 +39,6 @@ const nodeTypes: any = {
   lend: LendNode,
   custom: CustomNode,
   bridge: BridgeNode,
-  ethereumAddress: EthereumAddressNode,
 };
 
 // Initial wallet node (not deletable)
@@ -601,6 +599,66 @@ function FlowCanvas() {
     return () => window.removeEventListener('addNode', handleAddNode);
   }, [nodes, setNodes, setEdges, edgeType]);
 
+  // Listen for custom addBridge events from wallet node
+  useEffect(() => {
+    const handleAddBridge = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { sourceNodeId } = customEvent.detail;
+
+      // Find the source node (wallet)
+      const sourceNode = nodes.find((n) => n.id === sourceNodeId);
+      if (!sourceNode) return;
+
+      // Generate unique ID for bridge node
+      const existingNodeIds = nodes
+        .map((n) => {
+          const match = n.id.match(/node-(\d+)/);
+          return match ? parseInt(match[1]) : 0;
+        })
+        .filter((id) => !isNaN(id));
+      const maxExistingId = existingNodeIds.length > 0 ? Math.max(...existingNodeIds) : 0;
+      const bridgeNodeId = `node-${maxExistingId + 1}`;
+
+      // Create single Bridge node with Ethereum address field
+      const bridgeNode: Node<NodeData> = {
+        id: bridgeNodeId,
+        type: 'bridge',
+        position: {
+          x: sourceNode.position.x + 350,
+          y: sourceNode.position.y,
+        },
+        data: {
+          label: 'Bridge',
+          type: 'protocol',
+          bridgeChain: 'ethereum',
+          bridgeAsset: 'SUI',
+          bridgeOutputAsset: 'USDC',
+          bridgeAmount: '',
+          bridgeProtocol: 'none',
+          ethereumAddress: '',
+        },
+      };
+
+      // Add the bridge node
+      setNodes((nds) => [...nds, bridgeNode]);
+
+      // Create edge: Wallet -> Bridge
+      const edge: Edge = {
+        id: `e${sourceNodeId}-${bridgeNodeId}`,
+        source: sourceNodeId,
+        target: bridgeNodeId,
+        type: edgeType,
+        animated: false,
+        style: { strokeWidth: 2, stroke: '#a855f7' },
+      };
+
+      setEdges((eds) => [...eds, edge]);
+    };
+
+    window.addEventListener('addBridge', handleAddBridge);
+    return () => window.removeEventListener('addBridge', handleAddBridge);
+  }, [nodes, setNodes, setEdges, edgeType]);
+
   // Tab-close confirm modal: ESC = cancel, Enter = confirm
   useEffect(() => {
     if (!workspace.showTabCloseConfirm) return;
@@ -708,6 +766,7 @@ function FlowCanvas() {
         digest={lastResult?.digest || ''}
         stepCount={lastResult?.stepCount || 0}
         network="mainnet"
+        hasBridgeOperation={lastResult?.hasBridgeOperation || false}
       />
     </div>
   );

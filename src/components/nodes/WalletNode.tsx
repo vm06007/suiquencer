@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Plus, Bridge } from 'lucide-react';
+import { Plus, ArrowLeftRight } from 'lucide-react';
 import type { NodeData } from '@/types';
 import { WalletConnect } from '../WalletConnect';
 
@@ -57,7 +57,7 @@ function WalletNode({ data, id }: NodeProps) {
             window.dispatchEvent(event);
           }}
         >
-          <Bridge className="w-4 h-4" />
+          <ArrowLeftRight className="w-4 h-4" />
           <span>Bridge</span>
         </button>
       </div>

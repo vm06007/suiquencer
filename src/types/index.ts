@@ -54,8 +54,10 @@ export interface NodeData extends Record<string, unknown> {
   lendProtocol?: string; // scallop, navi
   // Bridge specific
   bridgeChain?: string; // ethereum, polygon, arbitrum, etc.
-  bridgeAsset?: string; // SUI, USDC, USDT
+  bridgeAsset?: string; // Input asset: SUI, USDC, USDT, WAL
+  bridgeOutputAsset?: string; // Output asset: ETH, USDC, USDT, WBTC, etc.
   bridgeAmount?: string;
+  bridgeProtocol?: string; // Destination DeFi protocol: aave, lido, uniswap, compound, none
   // Ethereum Address specific
   ethereumAddress?: string; // 0x... or name.eth
   // Tracking

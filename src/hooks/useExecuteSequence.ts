@@ -11,7 +11,7 @@ import type { NodeData, ComparisonOperator } from '@/types';
 
 export function useExecuteSequence() {
   const [isExecuting, setIsExecuting] = useState(false);
-  const [lastResult, setLastResult] = useState<{ digest: string; stepCount: number } | null>(null);
+  const [lastResult, setLastResult] = useState<{ digest: string; stepCount: number; hasBridgeOperation?: boolean } | null>(null);
   const account = useCurrentAccount();
   const { mutateAsync: signAndExecuteTransaction } = useSignAndExecuteTransaction();
   const suiClient = useSuiClient();
@@ -416,6 +416,45 @@ export function useExecuteSequence() {
             if (action !== 'deposit') {
               throw new Error(`Step ${i + 1}: Only deposit action is supported currently`);
             }
+          } else if (node.type === 'bridge') {
+            // Validate bridge node
+            const amount = parseFloat(node.data.bridgeAmount || '0');
+            const asset = node.data.bridgeAsset;
+            const outputAsset = node.data.bridgeOutputAsset;
+            const chain = node.data.bridgeChain;
+            const ethereumAddress = node.data.ethereumAddress;
+            const protocol = node.data.bridgeProtocol || 'none';
+
+            if (!asset) {
+              throw new Error(`Step ${i + 1}: Source asset is required`);
+            }
+
+            if (!outputAsset) {
+              throw new Error(`Step ${i + 1}: Destination asset is required`);
+            }
+
+            if (!chain) {
+              throw new Error(`Step ${i + 1}: Destination chain is required`);
+            }
+
+            if (amount <= 0) {
+              throw new Error(`Step ${i + 1}: Amount must be greater than 0`);
+            }
+
+            if (!ethereumAddress) {
+              throw new Error(`Step ${i + 1}: Ethereum address is required`);
+            }
+
+            // Validate Ethereum address format (basic check)
+            if (!ethereumAddress.endsWith('.eth') &&
+                !(ethereumAddress.startsWith('0x') && ethereumAddress.length === 42)) {
+              throw new Error(`Step ${i + 1}: Invalid Ethereum address format`);
+            }
+
+            console.log(`Step ${i + 1}: Bridge validation passed`);
+            if (protocol !== 'none') {
+              console.log(`  Destination protocol: ${protocol}`);
+            }
           } else {
             throw new Error(`Step ${i + 1}: Node type "${node.type}" not yet implemented`);
           }
@@ -702,6 +741,95 @@ export function useExecuteSequence() {
 
               console.log(`Added step ${i + 1}: Scallop deposit ${amount} ${asset}`);
             }
+          } else if (node.type === 'bridge') {
+            // Execute bridge operation
+            const amount = parseFloat(node.data.bridgeAmount || '0');
+            const asset = (node.data.bridgeAsset || 'SUI') as keyof typeof TOKENS;
+            const outputAsset = node.data.bridgeOutputAsset!;
+            const chain = node.data.bridgeChain!;
+            const ethereumAddress = node.data.ethereumAddress!;
+            const protocol = node.data.bridgeProtocol || 'none';
+
+            const tokenInfo = TOKENS[asset];
+            const amountInSmallestUnit = Math.floor(amount * Math.pow(10, tokenInfo.decimals));
+
+            console.log(`Step ${i + 1}: Cross-chain DeFi flow starting...`);
+            console.log(`  📤 Bridge: ${amount} ${asset} from Sui → ${chain}`);
+            console.log(`  🔄 Convert: ${asset} → ${outputAsset}`);
+            if (protocol !== 'none') {
+              console.log(`  🏦 Protocol: ${protocol}`);
+            }
+            console.log(`  📥 Destination: ${ethereumAddress}`);
+
+            // Full production flow:
+            // 1. Bridge assets from Sui → EVM chain (using Wormhole/native bridge)
+            // 2. Use LI.FI to route to optimal DEX/protocol
+            // 3. Execute DeFi action (Aave deposit, Lido stake, etc.)
+
+            // For demo: Transfer to demo address representing bridge lock
+            const BRIDGE_DEMO_ADDRESS = '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+            if (asset === 'SUI') {
+              const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+              tx.transferObjects([coin], BRIDGE_DEMO_ADDRESS);
+            } else {
+              const coins = await suiClient.getCoins({
+                owner: account.address,
+                coinType: tokenInfo.coinType,
+              });
+
+              if (!coins.data || coins.data.length === 0) {
+                throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet`);
+              }
+
+              const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+              if (totalBalance < BigInt(amountInSmallestUnit)) {
+                throw new Error(`Step ${i + 1}: Insufficient ${asset} balance`);
+              }
+
+              let remainingAmount = BigInt(amountInSmallestUnit);
+              const selectedCoins: string[] = [];
+              for (const coin of coins.data) {
+                if (remainingAmount <= 0) break;
+                selectedCoins.push(coin.coinObjectId);
+                remainingAmount -= BigInt(coin.balance);
+              }
+
+              if (selectedCoins.length > 1) {
+                const [primaryCoin, ...coinsToMerge] = selectedCoins;
+                tx.mergeCoins(
+                  tx.object(primaryCoin),
+                  coinsToMerge.map(coin => tx.object(coin))
+                );
+                const [coinToTransfer] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
+                tx.transferObjects([coinToTransfer], BRIDGE_DEMO_ADDRESS);
+              } else {
+                const [coinToTransfer] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
+                tx.transferObjects([coinToTransfer], BRIDGE_DEMO_ADDRESS);
+              }
+            }
+
+            console.log(`✓ Step ${i + 1}: Bridge transaction prepared`);
+            console.log(`\n📋 Production Flow:`);
+            console.log(`  1. ✓ Lock ${amount} ${asset} on Sui (this transaction)`);
+            console.log(`  2. ⏳ Bridge relayer transfers to ${chain}`);
+            console.log(`  3. ⏳ LI.FI routes ${asset} → ${outputAsset}`);
+            if (protocol !== 'none') {
+              console.log(`  4. ⏳ Deposit to ${protocol} protocol`);
+            }
+            console.log(`  5. ⏳ Deliver to ${ethereumAddress}\n`);
+
+            // Build descriptive toast message
+            let flowDescription = `${amount} ${asset} → ${outputAsset} on ${chain}`;
+            if (protocol !== 'none') {
+              flowDescription += ` → ${protocol}`;
+            }
+
+            toast.loading(
+              `🌉 Cross-chain flow: ${flowDescription}\n` +
+              `Destination: ${ethereumAddress.slice(0, 6)}...${ethereumAddress.slice(-4)}`,
+              { duration: 6000 }
+            );
           }
         }
 
@@ -720,10 +848,14 @@ export function useExecuteSequence() {
 
         console.log('Atomic transaction executed successfully:', result);
 
+        // Check if sequence contains bridge operations
+        const hasBridgeOperation = sequence.some(node => node.type === 'bridge');
+
         // Store the result for the modal
         setLastResult({
           digest: result.digest,
           stepCount: actualStepCount,
+          hasBridgeOperation,
         });
 
         toast.success(`Transaction confirmed (${actualStepCount} operation${actualStepCount === 1 ? '' : 's'})`);

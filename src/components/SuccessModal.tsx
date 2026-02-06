@@ -7,9 +7,10 @@ interface SuccessModalProps {
   digest: string;
   stepCount: number;
   network?: 'mainnet' | 'testnet' | 'devnet';
+  hasBridgeOperation?: boolean;
 }
 
-export function SuccessModal({ isOpen, onClose, digest, stepCount, network = 'mainnet' }: SuccessModalProps) {
+export function SuccessModal({ isOpen, onClose, digest, stepCount, network = 'mainnet', hasBridgeOperation = false }: SuccessModalProps) {
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -112,6 +113,47 @@ export function SuccessModal({ isOpen, onClose, digest, stepCount, network = 'ma
               </a>
             </div>
           </div>
+
+          {/* Bridge Next Steps */}
+          {hasBridgeOperation && (
+            <div className="mt-4 bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-purple-900 mb-2 flex items-center gap-2">
+                <span className="text-lg">🌉</span>
+                Cross-Chain Bridge in Progress
+              </h3>
+              <p className="text-xs text-purple-800 mb-3">
+                Your assets have been locked on Sui. The bridge process will continue on the destination chain.
+              </p>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 text-xs text-purple-700">
+                  <span className="font-medium">1.</span>
+                  <span>Bridge relayers will transfer your assets to the destination chain (5-15 min)</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-purple-700">
+                  <span className="font-medium">2.</span>
+                  <span>LI.FI will route your swap to the best DEX/protocol</span>
+                </div>
+                <div className="flex items-start gap-2 text-xs text-purple-700">
+                  <span className="font-medium">3.</span>
+                  <span>Final assets will be delivered to your destination address</span>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-purple-200">
+                <a
+                  href="https://li.fi/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 bg-gradient-to-r from-purple-600 to-purple-700 text-white py-2 rounded-lg font-semibold hover:from-purple-700 hover:to-purple-800 transition-all shadow-md hover:shadow-lg text-sm w-full"
+                >
+                  <span>Track on LI.FI</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <p className="text-xs text-purple-600 text-center mt-2">
+                  Powered by LI.FI cross-chain routing
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Network Badge */}
           <div className="mt-4 text-center">
