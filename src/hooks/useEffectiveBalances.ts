@@ -4,6 +4,7 @@ import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { TOKENS } from '@/config/tokens';
 import type { TokenBalance } from '@/types';
 import { getEffectiveBalances } from '@/utils/effectiveBalances';
+import { useExecutionSequence } from './useExecutionSequence';
 
 export function useEffectiveBalances(nodeId: string, enabled: boolean = true) {
   const nodes = useNodes();
@@ -44,6 +45,17 @@ export function useEffectiveBalances(nodeId: string, enabled: boolean = true) {
     }
   );
 
+  const { data: walBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.WAL.coinType,
+    },
+    {
+      enabled: !!account && enabled,
+    }
+  );
+
   // Calculate base balances
   const baseBalances: TokenBalance[] = useMemo(() => {
     if (!account) return [];
@@ -77,15 +89,27 @@ export function useEffectiveBalances(nodeId: string, enabled: boolean = true) {
       });
     }
 
+    if (walBalance) {
+      const amount = parseInt(walBalance.totalBalance) / Math.pow(10, TOKENS.WAL.decimals);
+      balances.push({
+        symbol: 'WAL',
+        balance: amount.toFixed(4),
+        isLoading: false,
+      });
+    }
+
     return balances;
-  }, [account, suiBalance, usdcBalance, usdtBalance]);
+  }, [account, suiBalance, usdcBalance, usdtBalance, walBalance]);
+
+  // Get sequence map for proper ordering
+  const { sequenceMap } = useExecutionSequence();
 
   // Calculate effective balances (wallet balance + effects of previous operations)
   const effectiveBalances = useMemo(() => {
     if (!account || !enabled || baseBalances.length === 0) return [];
 
-    return getEffectiveBalances(nodes as any, edges, nodeId, baseBalances);
-  }, [nodes, edges, nodeId, baseBalances, account, enabled]);
+    return getEffectiveBalances(nodes as any, edges, nodeId, baseBalances, sequenceMap);
+  }, [nodes, edges, nodeId, baseBalances, account, enabled, sequenceMap]);
 
   return {
     baseBalances,

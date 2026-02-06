@@ -20,6 +20,12 @@ export const TOKENS = {
     // Native USDT on SUI mainnet
     coinType: '0x375f70cf2ae4c00bf37117d0c85a2c71545e6ee05c4a5c7d282cd66a4504b068::usdt::USDT',
   },
+  WAL: {
+    symbol: 'WAL',
+    decimals: 9,
+    // Walrus token on SUI mainnet
+    coinType: '0x356a26eb9e012a68958082340d4c4116e7f55615cf27affcff209cf0ae544f59::wal::WAL',
+  },
 } as const;
 
 export type TokenSymbol = keyof typeof TOKENS;

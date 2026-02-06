@@ -61,8 +61,19 @@ function TransferNode({ data, id }: NodeProps) {
     }
   );
 
+  const { data: walBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.WAL.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
   // Get the balance for the selected asset
-  const balance = selectedAsset === 'SUI' ? suiBalance : selectedAsset === 'USDC' ? usdcBalance : usdtBalance;
+  const balance = selectedAsset === 'SUI' ? suiBalance : selectedAsset === 'USDC' ? usdcBalance : selectedAsset === 'USDT' ? usdtBalance : walBalance;
 
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
@@ -72,15 +83,15 @@ function TransferNode({ data, id }: NodeProps) {
     const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
     if (effectiveBal && effectiveBalances.length > 0) {
       const amount = parseFloat(effectiveBal.balance);
-      const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+      const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
       return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
     }
     // Fallback to wallet balance
-    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : usdtBalance;
+    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : tokenKey === 'USDT' ? usdtBalance : walBalance;
     if (!tokenBalance) return tokenKey;
     const decimals = TOKENS[tokenKey].decimals;
     const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
-    const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+    const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
 
@@ -193,7 +204,7 @@ function TransferNode({ data, id }: NodeProps) {
 
     const currentAmount = parseFloat(nodeData.amount || '0');
     const gasReserve = selectedAsset === 'SUI' ? SUI_GAS_RESERVE : 0;
-    const displayDecimals = selectedAsset === 'SUI' ? 4 : 2;
+    const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
 
     // Total available balance (wallet - gas reserve) - used for cumulative checks
     const totalAvailable = walletBalance - gasReserve;
@@ -334,6 +345,7 @@ function TransferNode({ data, id }: NodeProps) {
             <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
             <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
+            <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
           </select>
         </div>
 

@@ -62,15 +62,19 @@ export function getEffectiveBalances(
   nodes: Node<NodeData>[],
   edges: Edge[],
   nodeId: string,
-  baseBalances: TokenBalance[]
+  baseBalances: TokenBalance[],
+  sequenceMap?: Map<string, number>
 ): TokenBalance[] {
   const preds = getPredecessors(nodes, edges, nodeId);
 
-  // Sort by sequence number if available
-  preds.sort(
-    (a, b) =>
-      ((a.data as NodeData).sequenceNumber ?? 0) - ((b.data as NodeData).sequenceNumber ?? 0)
-  );
+  // Sort by sequence number from the topological sort
+  if (sequenceMap) {
+    preds.sort((a, b) => {
+      const seqA = sequenceMap.get(a.id) ?? 0;
+      const seqB = sequenceMap.get(b.id) ?? 0;
+      return seqA - seqB;
+    });
+  }
 
   const balances: Record<string, number> = {};
   baseBalances.forEach((t) => {

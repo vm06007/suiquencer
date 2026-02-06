@@ -44,6 +44,18 @@ export function WalletConnect() {
     }
   );
 
+  // Get WAL balance
+  const { data: walBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.WAL.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
   const formatBalance = (balance: string, decimals: number) => {
     const amount = Number(balance) / Math.pow(10, decimals);
     return amount.toFixed(decimals === 9 ? 4 : 2);
@@ -80,6 +92,11 @@ export function WalletConnect() {
             {usdtBalance && Number(usdtBalance.totalBalance) > 0 && (
               <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
                 {formatBalance(usdtBalance.totalBalance, TOKENS.USDT.decimals)} USDT
+              </div>
+            )}
+            {walBalance && Number(walBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {formatBalance(walBalance.totalBalance, TOKENS.WAL.decimals)} WAL
               </div>
             )}
           </div>

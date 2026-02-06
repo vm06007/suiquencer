@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes } from '@xyflow/react';
-import { Landmark } from 'lucide-react';
+import { Landmark, AlertTriangle } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { NodeMenu } from './NodeMenu';
 import { TOKENS } from '@/config/tokens';
@@ -51,6 +51,17 @@ function LendNode({ data, id }: NodeProps) {
     }
   );
 
+  const { data: walBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.WAL.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
 
@@ -59,21 +70,44 @@ function LendNode({ data, id }: NodeProps) {
     const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
     if (effectiveBal && effectiveBalances.length > 0) {
       const amount = parseFloat(effectiveBal.balance);
-      const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+      const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
       return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
     }
     // Fallback to wallet balance
-    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : usdtBalance;
+    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : tokenKey === 'USDT' ? usdtBalance : walBalance;
     if (!tokenBalance) return tokenKey;
     const decimals = TOKENS[tokenKey].decimals;
     const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
-    const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+    const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
 
   // Get sequence number from shared hook (uses topological sort)
   const { sequenceMap } = useExecutionSequence();
   const sequenceNumber = sequenceMap.get(id) || 0;
+
+  // Check balance validation
+  const balanceWarning = useMemo(() => {
+    if (!account) return null;
+
+    const lendAmount = parseFloat(nodeData.lendAmount || '0');
+    if (lendAmount <= 0) return null;
+
+    // Get effective balance for the selected asset
+    const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
+    if (!effectiveBal) return null;
+
+    const availableBalance = parseFloat(effectiveBal.balance);
+
+    if (lendAmount > availableBalance) {
+      return {
+        type: 'error' as const,
+        message: `Insufficient ${selectedAsset}. Available: ${availableBalance.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2)} ${selectedAsset}`,
+      };
+    }
+
+    return null;
+  }, [account, nodeData.lendAmount, selectedAsset, effectiveBalances]);
 
   const updateNodeData = useCallback(
     (updates: Partial<NodeData>) => {
@@ -165,6 +199,7 @@ function LendNode({ data, id }: NodeProps) {
             <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
             <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
+            <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
           </select>
         </div>
 
@@ -186,7 +221,7 @@ function LendNode({ data, id }: NodeProps) {
             const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
             if (effectiveBal && effectiveBalances.length > 0) {
               const amount = parseFloat(effectiveBal.balance);
-              const displayDecimals = selectedAsset === 'SUI' ? 4 : 2;
+              const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
               return (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Available: {amount.toFixed(displayDecimals)} {selectedAsset}
@@ -195,6 +230,16 @@ function LendNode({ data, id }: NodeProps) {
             }
             return null;
           })()}
+
+          {/* Balance warning */}
+          {balanceWarning && (
+            <div className="mt-2 flex items-start gap-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
+              <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-600 dark:text-red-400">
+                {balanceWarning.message}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Protocol */}

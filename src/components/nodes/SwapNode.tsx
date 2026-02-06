@@ -56,6 +56,17 @@ function SwapNode({ data, id }: NodeProps) {
     }
   );
 
+  const { data: walBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: TOKENS.WAL.coinType,
+    },
+    {
+      enabled: !!account,
+    }
+  );
+
   // Get balance for the from asset (needed for per-asset cumulative)
   const fromAsset = (nodeData.fromAsset || 'SUI') as keyof typeof TOKENS;
 
@@ -147,7 +158,7 @@ function SwapNode({ data, id }: NodeProps) {
     return { cumulativeAmount: cumulative, totalAmount: total };
   }, [id, nodes, edges, fromAsset]);
 
-  const fromBalance = fromAsset === 'SUI' ? suiBalance : fromAsset === 'USDC' ? usdcBalance : usdtBalance;
+  const fromBalance = fromAsset === 'SUI' ? suiBalance : fromAsset === 'USDC' ? usdcBalance : fromAsset === 'USDT' ? usdtBalance : walBalance;
 
   // Check balance validation for from asset (reserve SUI for gas when spending native SUI)
   const balanceWarning = useMemo(() => {
@@ -170,7 +181,7 @@ function SwapNode({ data, id }: NodeProps) {
 
     const currentAmount = parseFloat(nodeData.amount || '0');
     const gasReserve = fromAsset === 'SUI' ? SUI_GAS_RESERVE : 0;
-    const displayDecimals = fromAsset === 'SUI' ? 4 : 2;
+    const displayDecimals = fromAsset === 'SUI' || fromAsset === 'WAL' ? 4 : 2;
 
     // Total available balance (wallet - gas reserve) - used for cumulative checks
     const totalAvailable = walletBalance - gasReserve;
@@ -217,15 +228,15 @@ function SwapNode({ data, id }: NodeProps) {
     const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
     if (effectiveBal && effectiveBalances.length > 0) {
       const amount = parseFloat(effectiveBal.balance);
-      const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+      const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
       return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
     }
     // Fallback to wallet balance
-    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : usdtBalance;
+    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : tokenKey === 'USDT' ? usdtBalance : walBalance;
     if (!tokenBalance) return tokenKey;
     const decimals = TOKENS[tokenKey].decimals;
     const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
-    const displayDecimals = tokenKey === 'SUI' ? 4 : 2;
+    const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
 
@@ -246,7 +257,7 @@ function SwapNode({ data, id }: NodeProps) {
 
     if (from === to) {
       // Auto-select a different toAsset
-      const availableTokens = (['SUI', 'USDC', 'USDT'] as const).filter(token => token !== from);
+      const availableTokens = (['SUI', 'USDC', 'USDT', 'WAL'] as const).filter(token => token !== from);
       if (availableTokens.length > 0) {
         updateNodeData({ toAsset: availableTokens[0] });
       }
@@ -375,6 +386,7 @@ function SwapNode({ data, id }: NodeProps) {
             <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
             <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
+            <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
           </select>
         </div>
 
@@ -414,7 +426,7 @@ function SwapNode({ data, id }: NodeProps) {
             onChange={(e) => updateNodeData({ toAsset: e.target.value })}
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
           >
-            {(['SUI', 'USDC', 'USDT'] as const)
+            {(['SUI', 'USDC', 'USDT', 'WAL'] as const)
               .filter(token => token !== (nodeData.fromAsset || 'SUI'))
               .map(token => (
                 <option key={token} value={token}>
