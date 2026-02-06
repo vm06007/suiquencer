@@ -272,7 +272,11 @@ export function useExecuteSequence() {
         return result;
       } catch (error: any) {
         console.error('Execution failed:', error);
-        toast.error(error.message || 'Execution failed');
+        const msg = error?.message ?? '';
+        const isUserRejection = /user rejected|rejected the request|rejected the transaction/i.test(msg);
+        if (!isUserRejection) {
+          toast.error(msg || 'Execution failed');
+        }
         throw error;
       } finally {
         setIsExecuting(false);

@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react';
-import { Send, Repeat, Coins, Image, X } from 'lucide-react';
+import { Send, Repeat, Coins, Image } from 'lucide-react';
+import { NodeMenu } from './NodeMenu';
 import type { ProtocolType, NodeData } from '@/types';
 
 const PROTOCOL_OPTIONS = [
@@ -153,13 +154,7 @@ function SelectorNode({ id }: NodeProps) {
     <div className="bg-white dark:bg-gray-800 border-2 border-gray-400 dark:border-gray-600 border-dashed rounded-lg shadow-lg min-w-[280px]">
       <div className="bg-gray-100 dark:bg-gray-700 px-3 py-2 flex items-center justify-between border-b border-gray-300 dark:border-gray-600">
         <span className="font-semibold text-gray-700 dark:text-gray-200 text-sm">Select Action</span>
-        <button
-          onClick={handleDelete}
-          className="text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-          title="Delete node"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <NodeMenu onDelete={handleDelete} showReplace={false} isDark={false} />
       </div>
 
       <div className="p-4 space-y-2">

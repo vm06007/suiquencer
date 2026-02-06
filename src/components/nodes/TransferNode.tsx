@@ -1,10 +1,11 @@
 import { memo, useCallback, useMemo, useEffect, useState } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
-import { Send, X, CheckCircle, XCircle, Loader2, AlertTriangle, ExternalLink, Info } from 'lucide-react';
+import { Send, CheckCircle, XCircle, Loader2, AlertTriangle, ExternalLink, Info } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
 import { SuiNSHelper } from '../SuiNSHelper';
+import { NodeMenu } from './NodeMenu';
 import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import type { NodeData } from '@/types';
@@ -284,6 +285,24 @@ function TransferNode({ data, id }: NodeProps) {
     setNodes((nds) => nds.filter((node) => node.id !== id));
   }, [id, setNodes]);
 
+  const handleReplace = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.id === id
+          ? {
+              ...node,
+              type: 'selector',
+              data: {
+                label: 'Select Action',
+                type: 'protocol',
+              },
+            }
+          : node
+      )
+    );
+  }, [id, setNodes]);
+
   return (
     <div className="bg-white dark:bg-gray-800 border-2 border-green-500 rounded-lg shadow-lg min-w-[280px]">
       <div className="bg-green-500 px-3 py-2 flex items-center justify-between">
@@ -293,13 +312,7 @@ function TransferNode({ data, id }: NodeProps) {
             {sequenceNumber > 0 && `${sequenceNumber}. `}{nodeData.label}
           </span>
         </div>
-        <button
-          onClick={handleDelete}
-          className="text-white hover:text-red-200 transition-colors"
-          title="Delete node"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <NodeMenu onDelete={handleDelete} onReplace={handleReplace} />
       </div>
 
       <div className="p-4 space-y-3">

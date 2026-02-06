@@ -1,9 +1,10 @@
 import { memo, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
-import { Repeat, Plus, X, AlertTriangle, Loader2, TrendingDown } from 'lucide-react';
+import { Repeat, Plus, AlertTriangle, Loader2, TrendingDown } from 'lucide-react';
 import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { TOKENS, SUI_GAS_RESERVE } from '@/config/tokens';
 import { useSwapQuote } from '@/hooks/useSwapQuote';
+import { NodeMenu } from './NodeMenu';
 import type { NodeData } from '@/types';
 
 function SwapNode({ data, id }: NodeProps) {
@@ -206,6 +207,20 @@ function SwapNode({ data, id }: NodeProps) {
     );
   }, [id, setNodes]);
 
+  // Ensure fromAsset and toAsset are never the same
+  useEffect(() => {
+    const from = nodeData.fromAsset || 'SUI';
+    const to = nodeData.toAsset || 'USDC';
+
+    if (from === to) {
+      // Auto-select a different toAsset
+      const availableTokens = (['SUI', 'USDC', 'USDT'] as const).filter(token => token !== from);
+      if (availableTokens.length > 0) {
+        updateNodeData({ toAsset: availableTokens[0] });
+      }
+    }
+  }, [nodeData.fromAsset, nodeData.toAsset, updateNodeData]);
+
   // Store estimated output in node data for downstream nodes
   useEffect(() => {
     if (swapQuote.estimatedAmountOut && nodeData.toAsset) {
@@ -286,6 +301,24 @@ function SwapNode({ data, id }: NodeProps) {
     setNodes((nds) => nds.filter((node) => node.id !== id));
   }, [id, setNodes]);
 
+  const handleReplace = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNodes((nds) =>
+      nds.map((node) =>
+        node.id === id
+          ? {
+              ...node,
+              type: 'selector',
+              data: {
+                label: 'Select Action',
+                type: 'protocol',
+              },
+            }
+          : node
+      )
+    );
+  }, [id, setNodes]);
+
   return (
     <div className="bg-white dark:bg-gray-800 border-2 border-blue-500 rounded-lg shadow-lg min-w-[280px]">
       <div className="bg-blue-500 px-3 py-2 flex items-center justify-between">
@@ -295,13 +328,7 @@ function SwapNode({ data, id }: NodeProps) {
             {sequenceNumber > 0 && `${sequenceNumber}. `}{nodeData.label}
           </span>
         </div>
-        <button
-          onClick={handleDelete}
-          className="text-white hover:text-red-200 transition-colors"
-          title="Delete node"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <NodeMenu onDelete={handleDelete} onReplace={handleReplace} />
       </div>
 
       <div className="p-4 space-y-3">
@@ -355,9 +382,14 @@ function SwapNode({ data, id }: NodeProps) {
             onChange={(e) => updateNodeData({ toAsset: e.target.value })}
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
           >
-            <option value="SUI">SUI</option>
-            <option value="USDC">USDC</option>
-            <option value="USDT">USDT</option>
+            {(['SUI', 'USDC', 'USDT'] as const)
+              .filter(token => token !== (nodeData.fromAsset || 'SUI'))
+              .map(token => (
+                <option key={token} value={token}>
+                  {formatBalanceForDropdown(token)}
+                </option>
+              ))
+            }
           </select>
         </div>
 
