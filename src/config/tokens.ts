@@ -29,3 +29,34 @@ export const TOKENS = {
 } as const;
 
 export type TokenSymbol = keyof typeof TOKENS;
+
+// Scallop sCoin (MarketCoin) type mappings
+// Pattern: {scallop_packageId}::reserve::MarketCoin<{underlying_coinType}>
+const SCALLOP_MARKET_COIN_PKG = '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d';
+
+export const SCALLOP_SCOINS: Record<string, { symbol: string; coinType: string; decimals: number }> = {
+  SUI: {
+    symbol: 'sSUI',
+    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.SUI.coinType}>`,
+    decimals: 9,
+  },
+  USDC: {
+    symbol: 'sUSDC',
+    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.USDC.coinType}>`,
+    decimals: 6,
+  },
+  USDT: {
+    symbol: 'sUSDT',
+    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.USDT.coinType}>`,
+    decimals: 6,
+  },
+  WAL: {
+    symbol: 'sWAL',
+    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.WAL.coinType}>`,
+    decimals: 9,
+  },
+};
+
+export function getScallopSCoin(underlyingSymbol: string) {
+  return SCALLOP_SCOINS[underlyingSymbol] || null;
+}

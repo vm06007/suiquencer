@@ -457,8 +457,8 @@ export function useExecuteSequence() {
               throw new Error(`Step ${i + 1}: Only Scallop protocol is supported currently`);
             }
 
-            if (action !== 'deposit') {
-              throw new Error(`Step ${i + 1}: Only deposit action is supported currently`);
+            if (action !== 'deposit' && action !== 'withdraw' && action !== 'borrow' && action !== 'repay') {
+              throw new Error(`Step ${i + 1}: Unsupported lend action "${action}"`);
             }
           } else if (node.type === 'bridge') {
             // Validate bridge node
@@ -804,19 +804,18 @@ export function useExecuteSequence() {
             const tokenInfo = TOKENS[asset];
             const amountInSmallestUnit = Math.floor(amount * Math.pow(10, tokenInfo.decimals));
 
+            // Scallop protocol addresses
+            const scallop = {
+              packageId: '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d',
+              version: '0x07871c4b3c847a0f674510d4978d5cf6f960452795e8ff6f189fd2088a3f6ac7',
+              market: '0xa757975255146dc9686aa823b7838b507f315d704f428cbadad2f4ea061939d9',
+              clock: '0x0000000000000000000000000000000000000000000000000000000000000006',
+            };
+
             if (protocol === 'scallop' && action === 'deposit') {
               // Scallop deposit (mint)
-              const scallop = {
-                packageId: '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d',
-                version: '0x07871c4b3c847a0f674510d4978d5cf6f960452795e8ff6f189fd2088a3f6ac7',
-                market: '0xa757975255146dc9686aa823b7838b507f315d704f428cbadad2f4ea061939d9',
-                clock: '0x0000000000000000000000000000000000000000000000000000000000000006',
-              };
-
-              // Split coin for deposit
               const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
 
-              // Call mint_entry
               tx.moveCall({
                 target: `${scallop.packageId}::mint::mint_entry`,
                 typeArguments: [tokenInfo.coinType],
@@ -829,6 +828,231 @@ export function useExecuteSequence() {
               });
 
               console.log(`Added step ${i + 1}: Scallop deposit ${amount} ${asset}`);
+            } else if (protocol === 'scallop' && action === 'withdraw') {
+              // Scallop withdraw (redeem) - burn sCoin to get back underlying asset
+              const sCoinType = `${scallop.packageId}::reserve::MarketCoin<${tokenInfo.coinType}>`;
+
+              console.log(`Fetching s${asset} coins for withdraw...`);
+              const sCoins = await suiClient.getCoins({
+                owner: account.address,
+                coinType: sCoinType,
+              });
+
+              if (!sCoins.data || sCoins.data.length === 0) {
+                throw new Error(`Step ${i + 1}: No s${asset} coins found in wallet. Deposit first to get sCoin tokens.`);
+              }
+
+              // Calculate sCoin amount needed based on exchange rate
+              // Rate: 1 sCoin = X underlying. To redeem `amount` underlying, burn amount/rate sCoins
+              const exchangeRates: Record<string, number> = {
+                SUI: 1.0931, USDC: 1.0567, USDT: 1.0489, WAL: 1.0123,
+              };
+              const rate = exchangeRates[asset] || 1.0;
+              const sCoinAmount = Math.ceil((amount / rate) * Math.pow(10, tokenInfo.decimals));
+
+              const totalSCoinBalance = sCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+              if (totalSCoinBalance < BigInt(sCoinAmount)) {
+                throw new Error(`Step ${i + 1}: Insufficient s${asset}. Need ~${(sCoinAmount / Math.pow(10, tokenInfo.decimals)).toFixed(4)} s${asset}`);
+              }
+
+              // Select and merge sCoin objects
+              let remainingAmount = BigInt(sCoinAmount);
+              const selectedCoins: string[] = [];
+              for (const coin of sCoins.data) {
+                if (remainingAmount <= 0) break;
+                selectedCoins.push(coin.coinObjectId);
+                remainingAmount -= BigInt(coin.balance);
+              }
+
+              let sCoinArg;
+              if (selectedCoins.length > 1) {
+                const [primaryCoin, ...coinsToMerge] = selectedCoins;
+                tx.mergeCoins(
+                  tx.object(primaryCoin),
+                  coinsToMerge.map(c => tx.object(c))
+                );
+                [sCoinArg] = tx.splitCoins(tx.object(primaryCoin), [sCoinAmount]);
+              } else {
+                [sCoinArg] = tx.splitCoins(tx.object(selectedCoins[0]), [sCoinAmount]);
+              }
+
+              // Call redeem_entry: burns sCoin and returns underlying asset
+              tx.moveCall({
+                target: `${scallop.packageId}::redeem::redeem_entry`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(scallop.version),
+                  tx.object(scallop.market),
+                  sCoinArg,
+                  tx.object(scallop.clock),
+                ],
+              });
+
+              console.log(`Added step ${i + 1}: Scallop withdraw ${amount} ${asset} (burning ~${(sCoinAmount / Math.pow(10, tokenInfo.decimals)).toFixed(4)} s${asset})`);
+            } else if (protocol === 'scallop' && action === 'borrow') {
+              // Scallop borrow - borrow assets against existing obligation collateral
+              const obligationId = node.data.lendObligationId;
+              const obligationKeyId = node.data.lendObligationKeyId;
+
+              let finalObligationId = obligationId;
+              let finalObligationKeyId = obligationKeyId;
+
+              // If not manually specified, auto-detect from wallet
+              if (!finalObligationId || !finalObligationKeyId) {
+                console.log(`Auto-detecting Scallop obligation for borrow...`);
+
+                const obligations = await suiClient.getOwnedObjects({
+                  owner: account.address,
+                  filter: {
+                    StructType: `${scallop.packageId}::obligation::Obligation`,
+                  },
+                  options: { showContent: true },
+                });
+
+                if (!obligations.data || obligations.data.length === 0) {
+                  throw new Error(`Step ${i + 1}: No Scallop obligation found. You need collateral deposited to borrow.`);
+                }
+
+                finalObligationId = obligations.data[0].data?.objectId;
+
+                const obligationKeys = await suiClient.getOwnedObjects({
+                  owner: account.address,
+                  filter: {
+                    StructType: `${scallop.packageId}::obligation::ObligationKey`,
+                  },
+                  options: { showContent: true },
+                });
+
+                if (!obligationKeys.data || obligationKeys.data.length === 0) {
+                  throw new Error(`Step ${i + 1}: No Scallop obligation key found. Cannot borrow without the key.`);
+                }
+
+                finalObligationKeyId = obligationKeys.data[0].data?.objectId;
+
+                console.log(`Found obligation: ${finalObligationId}, key: ${finalObligationKeyId}`);
+              }
+
+              if (!finalObligationId || !finalObligationKeyId) {
+                throw new Error(`Step ${i + 1}: Could not find obligation objects for borrow`);
+              }
+
+              // Call borrow_entry: borrows from the market using obligation as collateral
+              tx.moveCall({
+                target: `${scallop.packageId}::borrow::borrow_entry`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(scallop.version),
+                  tx.object(finalObligationId),
+                  tx.object(finalObligationKeyId),
+                  tx.object(scallop.market),
+                  tx.pure.u64(amountInSmallestUnit),
+                  tx.object(scallop.clock),
+                ],
+              });
+
+              console.log(`Added step ${i + 1}: Scallop borrow ${amount} ${asset} (obligation: ${finalObligationId?.slice(0, 10)}...)`);
+            } else if (protocol === 'scallop' && action === 'repay') {
+              // Scallop repay - repay borrowed assets to reduce debt on obligation
+              const obligationId = node.data.lendObligationId;
+              const obligationKeyId = node.data.lendObligationKeyId;
+
+              let finalObligationId = obligationId;
+              let finalObligationKeyId = obligationKeyId;
+
+              // Auto-detect obligation if not specified
+              if (!finalObligationId || !finalObligationKeyId) {
+                console.log(`Auto-detecting Scallop obligation for repay...`);
+
+                const obligations = await suiClient.getOwnedObjects({
+                  owner: account.address,
+                  filter: {
+                    StructType: `${scallop.packageId}::obligation::Obligation`,
+                  },
+                  options: { showContent: true },
+                });
+
+                if (!obligations.data || obligations.data.length === 0) {
+                  throw new Error(`Step ${i + 1}: No Scallop obligation found. You need an active borrow to repay.`);
+                }
+
+                finalObligationId = obligations.data[0].data?.objectId;
+
+                const obligationKeys = await suiClient.getOwnedObjects({
+                  owner: account.address,
+                  filter: {
+                    StructType: `${scallop.packageId}::obligation::ObligationKey`,
+                  },
+                  options: { showContent: true },
+                });
+
+                if (!obligationKeys.data || obligationKeys.data.length === 0) {
+                  throw new Error(`Step ${i + 1}: No Scallop obligation key found. Cannot repay without the key.`);
+                }
+
+                finalObligationKeyId = obligationKeys.data[0].data?.objectId;
+
+                console.log(`Found obligation: ${finalObligationId}, key: ${finalObligationKeyId}`);
+              }
+
+              if (!finalObligationId || !finalObligationKeyId) {
+                throw new Error(`Step ${i + 1}: Could not find obligation objects for repay`);
+              }
+
+              // Split coin for repayment
+              let repayCoin;
+              if (asset === 'SUI') {
+                [repayCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+              } else {
+                // Fetch non-SUI coins from wallet
+                const coins = await suiClient.getCoins({
+                  owner: account.address,
+                  coinType: tokenInfo.coinType,
+                });
+
+                if (!coins.data || coins.data.length === 0) {
+                  throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet for repayment`);
+                }
+
+                const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+                if (totalBalance < BigInt(amountInSmallestUnit)) {
+                  throw new Error(`Step ${i + 1}: Insufficient ${asset} balance for repayment`);
+                }
+
+                let remainingAmount = BigInt(amountInSmallestUnit);
+                const selectedCoins: string[] = [];
+                for (const coin of coins.data) {
+                  if (remainingAmount <= 0) break;
+                  selectedCoins.push(coin.coinObjectId);
+                  remainingAmount -= BigInt(coin.balance);
+                }
+
+                if (selectedCoins.length > 1) {
+                  const [primaryCoin, ...coinsToMerge] = selectedCoins;
+                  tx.mergeCoins(
+                    tx.object(primaryCoin),
+                    coinsToMerge.map(c => tx.object(c))
+                  );
+                  [repayCoin] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
+                } else {
+                  [repayCoin] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
+                }
+              }
+
+              // Call repay_entry: repays borrowed amount on the obligation
+              tx.moveCall({
+                target: `${scallop.packageId}::repay::repay_entry`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(scallop.version),
+                  tx.object(finalObligationId),
+                  tx.object(finalObligationKeyId),
+                  tx.object(scallop.market),
+                  repayCoin,
+                  tx.object(scallop.clock),
+                ],
+              });
+
+              console.log(`Added step ${i + 1}: Scallop repay ${amount} ${asset} (obligation: ${finalObligationId?.slice(0, 10)}...)`);
             }
           } else if (node.type === 'stake') {
             // Execute staking operation

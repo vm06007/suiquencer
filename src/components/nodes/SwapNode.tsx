@@ -269,12 +269,16 @@ function SwapNode({ data, id }: NodeProps) {
   // Store estimated output in node data for downstream nodes
   useEffect(() => {
     if (swapQuote.estimatedAmountOut && nodeData.toAsset) {
-      updateNodeData({
-        estimatedAmountOut: swapQuote.estimatedAmountOut,
-        estimatedAmountOutSymbol: nodeData.toAsset,
-      });
+      // Only update if values actually changed to avoid infinite re-render loop
+      if (nodeData.estimatedAmountOut !== swapQuote.estimatedAmountOut ||
+          nodeData.estimatedAmountOutSymbol !== nodeData.toAsset) {
+        updateNodeData({
+          estimatedAmountOut: swapQuote.estimatedAmountOut,
+          estimatedAmountOutSymbol: nodeData.toAsset,
+        });
+      }
     }
-  }, [swapQuote.estimatedAmountOut, nodeData.toAsset, updateNodeData]);
+  }, [swapQuote.estimatedAmountOut, nodeData.toAsset, nodeData.estimatedAmountOut, nodeData.estimatedAmountOutSymbol, updateNodeData]);
 
   // Update all connected transfer nodes with split amounts when output changes
   useEffect(() => {

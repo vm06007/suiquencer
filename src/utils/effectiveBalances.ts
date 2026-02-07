@@ -130,6 +130,24 @@ export function getEffectiveBalances(
         if (balances[assetKey] < 0) balances[assetKey] = 0;
       }
     }
+
+    // Handle lend nodes (deposit reduces balance, withdraw/borrow increases balance)
+    if (node.type === 'lend' && d.lendAsset && d.lendAmount?.trim()) {
+      const amt = parseFloat(d.lendAmount);
+      if (!Number.isNaN(amt)) {
+        const assetKey =
+          resolveOutSymbol(d.lendAsset) ??
+          baseBalances.find((t) => canonicalKey(t.symbol) === canonicalKey(d.lendAsset!))?.symbol ??
+          d.lendAsset;
+        const action = d.lendAction || 'deposit';
+        if (action === 'deposit' || action === 'repay') {
+          balances[assetKey] = (balances[assetKey] ?? 0) - amt;
+          if (balances[assetKey] < 0) balances[assetKey] = 0;
+        } else if (action === 'withdraw' || action === 'borrow') {
+          balances[assetKey] = (balances[assetKey] ?? 0) + amt;
+        }
+      }
+    }
   }
 
   const baseResult = baseBalances.map((t) => {

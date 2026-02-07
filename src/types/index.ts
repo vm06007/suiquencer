@@ -52,6 +52,8 @@ export interface NodeData extends Record<string, unknown> {
   lendAsset?: string; // SUI, USDC, USDT
   lendAmount?: string;
   lendProtocol?: string; // scallop, navi
+  lendObligationId?: string; // Scallop obligation object ID (for borrow/repay)
+  lendObligationKeyId?: string; // Scallop obligation key object ID (for borrow/repay)
   // Stake specific
   stakeProtocol?: string; // native, aftermath, volo
   stakeAmount?: string;

@@ -79,10 +79,26 @@ function getInitialWorkspace() {
             id = `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
           }
           seen.add(id);
-          return { ...t, id };
+          // Deduplicate edges in each tab to prevent React key collisions
+          const edgeSeen = new Set<string>();
+          const edges = (t.edges || []).filter((e: any) => {
+            if (edgeSeen.has(e.id)) return false;
+            edgeSeen.add(e.id);
+            return true;
+          });
+          return { ...t, id, edges };
         });
         const activeIndex = workspace.tabs.findIndex((t: any) => t.id === workspace.activeTabId);
         const activeTab = activeIndex >= 0 ? tabs[activeIndex] : tabs[0];
+        // Initialize nodeId counter based on existing nodes across all tabs
+        let maxNodeNum = 1;
+        for (const tab of tabs) {
+          for (const n of (tab.nodes || [])) {
+            const match = n.id.match(/node-(\d+)/);
+            if (match) maxNodeNum = Math.max(maxNodeNum, parseInt(match[1]));
+          }
+        }
+        nodeId = maxNodeNum + 1;
         console.log('Workspace restored from localStorage');
         return {
           tabs,
@@ -180,6 +196,16 @@ function FlowCanvas() {
 
   // Handle inserting a node (either between edges or after a selected node)
   const handleInsertNode = useCallback(() => {
+    // Compute a safe unique node ID based on existing nodes (prevents collisions with restored state)
+    const existingIds = nodes.map((n) => {
+      const m = n.id.match(/node-(\d+)/);
+      return m ? parseInt(m[1]) : 0;
+    });
+    const maxExisting = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+    const safeNextId = Math.max(maxExisting + 1, nodeId);
+    nodeId = safeNextId + 1;
+    const newNodeId = `node-${safeNextId}`;
+
     // Case 1: Edge is selected - insert node between two connected nodes
     if (selectedEdges.length === 1) {
       const selectedEdge = edges.find((e) => e.id === selectedEdges[0]);
@@ -191,7 +217,7 @@ function FlowCanvas() {
 
       // Create new selector node positioned between source and target
       const newNode: Node<NodeData> = {
-        id: `node-${nodeId++}`,
+        id: newNodeId,
         type: 'selector',
         position: {
           x: (sourceNode.position.x + targetNode.position.x) / 2,
@@ -238,7 +264,7 @@ function FlowCanvas() {
 
       // Create new selector node positioned to the right of the source
       const newNode: Node<NodeData> = {
-        id: `node-${nodeId++}`,
+        id: newNodeId,
         type: 'selector',
         position: {
           x: sourceNode.position.x + 350,
@@ -386,35 +412,43 @@ function FlowCanvas() {
   }, [selectedEdges.length, selectedNodes, nodes]);
 
   // Compute styled edges based on selection and node types
+  // Deduplicate by edge ID to prevent React key collisions that cause infinite re-renders
   const styledEdges = useMemo(() => {
-    return edges.map((edge) => {
-      const targetNode = nodes.find((n) => n.id === edge.target);
-      const isTargetSelector = targetNode?.type === 'selector';
-      const isSelected = selectedEdges.includes(edge.id);
+    const seen = new Set<string>();
+    return edges
+      .filter((edge) => {
+        if (seen.has(edge.id)) return false;
+        seen.add(edge.id);
+        return true;
+      })
+      .map((edge) => {
+        const targetNode = nodes.find((n) => n.id === edge.target);
+        const isTargetSelector = targetNode?.type === 'selector';
+        const isSelected = selectedEdges.includes(edge.id);
 
-      return {
-        ...edge,
-        animated: isSelected || isTargetSelector,
-        style: {
-          strokeWidth: 2,
-          stroke: '#3b82f6',
-        },
-        label: isSelected ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleInsertNode();
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg transition-colors"
-            title="Insert node here"
-          >
-            +
-          </button>
-        ) : undefined,
-        labelStyle: isSelected ? { cursor: 'pointer' } : undefined,
-        labelBgStyle: isSelected ? { fill: 'transparent' } : undefined,
-      };
-    });
+        return {
+          ...edge,
+          animated: isSelected || isTargetSelector,
+          style: {
+            strokeWidth: 2,
+            stroke: '#3b82f6',
+          },
+          label: isSelected ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleInsertNode();
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-lg transition-colors"
+              title="Insert node here"
+            >
+              +
+            </button>
+          ) : undefined,
+          labelStyle: isSelected ? { cursor: 'pointer' } : undefined,
+          labelBgStyle: isSelected ? { fill: 'transparent' } : undefined,
+        };
+      });
   }, [edges, nodes, selectedEdges, handleInsertNode]);
 
   const onConnect = useCallback(
@@ -594,7 +628,10 @@ function FlowCanvas() {
         animated: true, // Dashed until selector chooses an action
         style: { strokeWidth: 2, stroke: '#3b82f6' },
       };
-      setEdges((eds) => [...eds, newEdge]);
+      setEdges((eds) => {
+        if (eds.some((e) => e.id === newEdge.id)) return eds;
+        return [...eds, newEdge];
+      });
     };
 
     window.addEventListener('addNode', handleAddNode);
@@ -654,7 +691,10 @@ function FlowCanvas() {
         style: { strokeWidth: 2, stroke: '#a855f7' },
       };
 
-      setEdges((eds) => [...eds, edge]);
+      setEdges((eds) => {
+        if (eds.some((e) => e.id === edge.id)) return eds;
+        return [...eds, edge];
+      });
     };
 
     window.addEventListener('addBridge', handleAddBridge);

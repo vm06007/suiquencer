@@ -1,9 +1,9 @@
 import { memo, useCallback, useMemo, useState } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow, useNodes } from '@xyflow/react';
-import { Landmark, AlertTriangle, X, TrendingUp, Loader2, Plus } from 'lucide-react';
+import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { Landmark, AlertTriangle, X, TrendingUp, Loader2, Plus, Info } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { NodeMenu } from './NodeMenu';
-import { TOKENS } from '@/config/tokens';
+import { TOKENS, SCALLOP_SCOINS } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import { useLendingAPY } from '@/hooks/useLendingAPY';
@@ -14,6 +14,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 function LendNode({ data, id }: NodeProps) {
   const { setNodes } = useReactFlow();
   const nodes = useNodes();
+  const edges = useEdges();
   const nodeData = data as NodeData;
   const suiClient = useSuiClient();
   const account = useCurrentAccount();
@@ -21,6 +22,7 @@ function LendNode({ data, id }: NodeProps) {
 
   // Get wallet balances for all assets
   const selectedAsset = (nodeData.lendAsset || 'SUI') as keyof typeof TOKENS;
+  const currentAction = nodeData.lendAction || 'deposit';
 
   const { data: suiBalance } = useSuiClientQuery(
     'getBalance',
@@ -68,6 +70,89 @@ function LendNode({ data, id }: NodeProps) {
 
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
+
+  // Query sCoin balance for withdraw action
+  const sCoinInfo = SCALLOP_SCOINS[selectedAsset];
+  const { data: sCoinBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: sCoinInfo?.coinType || '',
+    },
+    {
+      enabled: !!account && !!sCoinInfo && currentAction === 'withdraw',
+    }
+  );
+
+  // Query Scallop Obligation for borrow action
+  const scallopProtocolPkg = '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d';
+  const { data: obligationObjects } = useSuiClientQuery(
+    'getOwnedObjects',
+    {
+      owner: account?.address || '',
+      filter: {
+        StructType: `${scallopProtocolPkg}::obligation::Obligation`,
+      },
+      options: { showContent: true },
+    },
+    {
+      enabled: !!account && (currentAction === 'borrow' || currentAction === 'repay'),
+    }
+  );
+
+  // Query Scallop ObligationKey for borrow/repay action
+  const { data: obligationKeyObjects } = useSuiClientQuery(
+    'getOwnedObjects',
+    {
+      owner: account?.address || '',
+      filter: {
+        StructType: `${scallopProtocolPkg}::obligation::ObligationKey`,
+      },
+      options: { showContent: true },
+    },
+    {
+      enabled: !!account && (currentAction === 'borrow' || currentAction === 'repay'),
+    }
+  );
+
+  // Detect predecessor lend nodes that enable withdraw/borrow/repay
+  const { hasPredecessorDeposit, hasPredecessorBorrow } = useMemo(() => {
+    let foundDeposit = false;
+    let foundBorrow = false;
+    const visited = new Set<string>();
+    const checkPredecessors = (nodeId: string) => {
+      if (visited.has(nodeId)) return;
+      visited.add(nodeId);
+      const incomingEdges = edges.filter(e => e.target === nodeId);
+      for (const edge of incomingEdges) {
+        const sourceNode = nodes.find(n => n.id === edge.source);
+        if (!sourceNode) continue;
+        const sourceData = sourceNode.data as NodeData;
+        if (sourceNode.type === 'lend' && (sourceData.lendAsset || 'SUI') === selectedAsset) {
+          if (sourceData.lendAction === 'deposit' || !sourceData.lendAction) {
+            foundDeposit = true;
+          }
+          if (sourceData.lendAction === 'borrow') {
+            foundBorrow = true;
+          }
+        }
+        checkPredecessors(edge.source);
+      }
+    };
+    checkPredecessors(id);
+    return { hasPredecessorDeposit: foundDeposit, hasPredecessorBorrow: foundBorrow };
+  }, [nodes, edges, id, selectedAsset]);
+
+  // Determine if user has sCoin balance in wallet (enables withdraw even without predecessor)
+  const walletSCoinBalance = useMemo(() => {
+    if (!sCoinBalance || !sCoinInfo) return 0;
+    return parseInt(sCoinBalance.totalBalance) / Math.pow(10, sCoinInfo.decimals);
+  }, [sCoinBalance, sCoinInfo]);
+
+  const canWithdraw = hasPredecessorDeposit || walletSCoinBalance > 0;
+  const hasObligation = (obligationObjects?.data?.length ?? 0) > 0;
+  const canBorrow = hasObligation || hasPredecessorDeposit;
+  const canRepay = hasObligation || hasPredecessorBorrow;
 
   // Get APY data for the selected asset and protocol
   const { apy } = useLendingAPY(
@@ -147,28 +232,65 @@ function LendNode({ data, id }: NodeProps) {
   const { sequenceMap } = useExecutionSequence();
   const sequenceNumber = sequenceMap.get(id) || 0;
 
-  // Check balance validation
+  // Check balance validation (action-specific)
   const balanceWarning = useMemo(() => {
     if (!account) return null;
 
     const lendAmount = parseFloat(nodeData.lendAmount || '0');
     if (lendAmount <= 0) return null;
 
-    // Get effective balance for the selected asset
-    const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
-    if (!effectiveBal) return null;
+    const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
 
-    const availableBalance = parseFloat(effectiveBal.balance);
-
-    if (lendAmount > availableBalance) {
-      return {
-        type: 'error' as const,
-        message: `Insufficient ${selectedAsset}. Available: ${availableBalance.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2)} ${selectedAsset}`,
-      };
+    if (currentAction === 'deposit') {
+      // Deposit checks underlying asset balance
+      const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
+      if (!effectiveBal) return null;
+      const availableBalance = parseFloat(effectiveBal.balance);
+      if (lendAmount > availableBalance) {
+        return {
+          type: 'error' as const,
+          message: `Insufficient ${selectedAsset}. Available: ${availableBalance.toFixed(displayDecimals)} ${selectedAsset}`,
+        };
+      }
+    } else if (currentAction === 'withdraw') {
+      // Withdraw checks sCoin balance (unless predecessor deposit exists)
+      if (!hasPredecessorDeposit && walletSCoinBalance <= 0) {
+        return {
+          type: 'error' as const,
+          message: `No s${selectedAsset} found in wallet. Deposit first to get sCoin tokens.`,
+        };
+      }
+    } else if (currentAction === 'borrow') {
+      // Borrow checks if obligation exists
+      if (!canBorrow) {
+        return {
+          type: 'error' as const,
+          message: 'No obligation found. You need collateral deposited on Scallop to borrow.',
+        };
+      }
+    } else if (currentAction === 'repay') {
+      // Repay checks if obligation exists (user must have borrowed)
+      if (!canRepay) {
+        return {
+          type: 'error' as const,
+          message: 'No obligation found. You need an active borrow position to repay.',
+        };
+      }
+      // Also check if user has enough of the asset to repay
+      const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
+      if (effectiveBal) {
+        const availableBalance = parseFloat(effectiveBal.balance);
+        if (lendAmount > availableBalance) {
+          return {
+            type: 'error' as const,
+            message: `Insufficient ${selectedAsset}. Available: ${availableBalance.toFixed(displayDecimals)} ${selectedAsset}`,
+          };
+        }
+      }
     }
 
     return null;
-  }, [account, nodeData.lendAmount, selectedAsset, effectiveBalances]);
+  }, [account, nodeData.lendAmount, selectedAsset, effectiveBalances, currentAction, hasPredecessorDeposit, walletSCoinBalance, canBorrow, canRepay]);
 
   const updateNodeData = useCallback(
     (updates: Partial<NodeData>) => {
@@ -262,9 +384,9 @@ function LendNode({ data, id }: NodeProps) {
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-orange-500 dark:focus:border-orange-400"
           >
             <option value="deposit">Deposit (Lend)</option>
-            <option value="withdraw" disabled>Withdraw (Coming Soon)</option>
-            <option value="borrow" disabled>Borrow (Coming Soon)</option>
-            <option value="repay" disabled>Repay (Coming Soon)</option>
+            <option value="withdraw">Withdraw</option>
+            <option value="borrow">Borrow</option>
+            <option value="repay">Repay</option>
           </select>
         </div>
 
@@ -289,7 +411,7 @@ function LendNode({ data, id }: NodeProps) {
             <div className="mt-2 flex items-center gap-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded">
               <TrendingUp className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" />
               <div className="flex-1">
-                {(nodeData.lendAction === 'deposit' || nodeData.lendAction === 'withdraw' || !nodeData.lendAction) ? (
+                {(currentAction === 'deposit' || currentAction === 'withdraw') ? (
                   <p className="text-xs text-green-700 dark:text-green-300">
                     <span className="font-semibold">{apy.depositAPY}% APY</span> · Deposit Rate
                   </p>
@@ -306,7 +428,7 @@ function LendNode({ data, id }: NodeProps) {
         {/* Amount */}
         <div>
           <label className="text-xs text-gray-600 dark:text-gray-300 mb-1 block">
-            Amount
+            {currentAction === 'withdraw' ? 'Amount to Withdraw' : currentAction === 'borrow' ? 'Amount to Borrow' : currentAction === 'repay' ? 'Amount to Repay' : 'Amount'}
           </label>
           <input
             type="number"
@@ -316,8 +438,8 @@ function LendNode({ data, id }: NodeProps) {
             placeholder="1.0"
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-orange-500 dark:focus:border-orange-400"
           />
-          {/* Show available balance */}
-          {(() => {
+          {/* Show available balance (action-specific) */}
+          {currentAction === 'deposit' && (() => {
             const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
             if (effectiveBal && effectiveBalances.length > 0) {
               const amount = parseFloat(effectiveBal.balance);
@@ -329,6 +451,39 @@ function LendNode({ data, id }: NodeProps) {
               );
             }
             return null;
+          })()}
+          {currentAction === 'withdraw' && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {hasPredecessorDeposit
+                ? `sCoin from prior deposit in flow`
+                : `Wallet: ${walletSCoinBalance.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2)} s${selectedAsset}`
+              }
+            </p>
+          )}
+          {currentAction === 'borrow' && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {hasObligation
+                ? `Obligation found — borrow against your collateral`
+                : hasPredecessorDeposit
+                  ? `Collateral from prior deposit in flow`
+                  : `No obligation found`
+              }
+            </p>
+          )}
+          {currentAction === 'repay' && (() => {
+            const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
+            const available = effectiveBal ? parseFloat(effectiveBal.balance) : 0;
+            const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
+            return (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                {hasObligation
+                  ? `Obligation found — Available: ${available.toFixed(displayDecimals)} ${selectedAsset}`
+                  : hasPredecessorBorrow
+                    ? `Repaying borrow from prior step in flow`
+                    : `No obligation found`
+                }
+              </p>
+            );
           })()}
 
           {/* Balance warning */}
@@ -342,8 +497,8 @@ function LendNode({ data, id }: NodeProps) {
           )}
         </div>
 
-        {/* Receipt Tokens Display */}
-        {(nodeData.lendAction === 'deposit' || !nodeData.lendAction) && receiptTokenAmount && (
+        {/* Receipt Tokens Display (Deposit) */}
+        {(currentAction === 'deposit' || !nodeData.lendAction) && receiptTokenAmount && (
           <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-3 py-2">
             <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">You Will Receive</div>
             {receiptTokenAmount.isLoading ? (
@@ -361,6 +516,62 @@ function LendNode({ data, id }: NodeProps) {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Withdraw Info: sCoin burn */}
+        {currentAction === 'withdraw' && receiptTokenAmount && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded px-3 py-2">
+            <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">You Will Burn</div>
+            {receiptTokenAmount.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>Fetching rate...</span>
+              </div>
+            ) : (
+              <>
+                <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  ~{receiptTokenAmount.amount} {receiptTokenAmount.symbol}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  to redeem ~{nodeData.lendAmount} {selectedAsset}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Borrow Info */}
+        {currentAction === 'borrow' && nodeData.lendAmount && parseFloat(nodeData.lendAmount) > 0 && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded px-3 py-2">
+            <div className="flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                  Borrow {nodeData.lendAmount} {selectedAsset}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {apy ? `${apy.borrowAPY}% APY` : ''} — Requires sufficient collateral to avoid liquidation
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Repay Info */}
+        {currentAction === 'repay' && nodeData.lendAmount && parseFloat(nodeData.lendAmount) > 0 && (
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded px-3 py-2">
+            <div className="flex items-start gap-2">
+              <Info className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs text-green-700 dark:text-green-300 font-medium">
+                  Repay {nodeData.lendAmount} {selectedAsset}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Reduces your debt and frees up collateral
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
