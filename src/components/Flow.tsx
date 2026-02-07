@@ -758,8 +758,8 @@ function FlowCanvas() {
           >
             <Background
               gap={16}
-              size={1}
-              color={theme === 'dark' ? '#ffffff' : '#d1d5db'}
+              size={theme === 'dark' ? 1 : 2}
+              color={theme === 'dark' ? '#ffffff' : '#97a3f0'}
               style={{ backgroundColor: theme === 'dark' ? '#030712' : '#f9fafb' }}
             />
             <Controls />
