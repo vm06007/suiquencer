@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2, GitBranch, Moon, Sun, Save, FolderOpen, Plus, X } from 'lucide-react';
+import { Maximize2, Minimize2, GitBranch, Moon, Sun, Save, FolderOpen, Plus, X, CloudUpload } from 'lucide-react';
 import { useState } from 'react';
 
 interface Tab {
@@ -23,6 +23,7 @@ interface SidebarProps {
     onTabAdd: () => void;
     onCloseCurrentTab: () => void;
     canCloseTab: boolean;
+    onShare: () => void;
 }
 
 export function Sidebar({
@@ -41,6 +42,7 @@ export function Sidebar({
     onTabAdd,
     onCloseCurrentTab,
     canCloseTab,
+    onShare,
 }: SidebarProps) {
     const [showEdgeMenu, setShowEdgeMenu] = useState(false);
     const [hoveredTabId, setHoveredTabId] = useState<string | null>(null);
@@ -70,6 +72,13 @@ export function Sidebar({
                     title="Export to file"
                 >
                     <Save className="w-5 h-5" />
+                </button>
+                <button
+                    onClick={onShare}
+                    className="w-10 h-10 flex items-center justify-center rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    title="Share to IPFS"
+                >
+                    <CloudUpload className="w-5 h-5" />
                 </button>
             </div>
 

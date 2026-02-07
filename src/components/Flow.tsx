@@ -26,10 +26,13 @@ import BridgeNode from './nodes/BridgeNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
 import { SuccessModal } from './SuccessModal';
+import { ShareDialog } from './ShareDialog';
 import { useExecuteSequence } from '@/hooks/useExecuteSequence';
 import { useTheme } from '@/hooks/useTheme';
 import { useFlowWorkspace } from '@/hooks/useFlowWorkspace';
 import { useFlowFileOperations } from '@/hooks/useFlowFileOperations';
+import { useFlowShare } from '@/hooks/useFlowShare';
+import { useSharedFlowLoader } from '@/hooks/useSharedFlowLoader';
 import type { NodeData } from '@/types';
 
 const nodeTypes: any = {
@@ -168,6 +171,27 @@ function FlowCanvas() {
     setEdges,
     () => `${tabId++}`
   );
+
+  // Share flow hooks
+  const flowShare = useFlowShare({
+    nodes: nodes as Node<NodeData>[],
+    edges,
+    tabs: workspace.tabs,
+    activeTabId: workspace.activeTabId,
+    setTabs: workspace.setTabs,
+    setActiveTabId: workspace.setActiveTabId,
+    setNodes,
+    setEdges,
+    getNextTabId: () => `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  });
+
+  const { isLoading: isLoadingSharedFlow } = useSharedFlowLoader({
+    onLoadSharedFlow: flowShare.handleLoadSharedFlow,
+    onError: (message) => {
+      console.error('Failed to load shared flow:', message);
+      alert(`Failed to load shared flow: ${message}`);
+    },
+  });
 
   // Auto-save to localStorage when nodes or edges change (add/remove node, connect edge)
   useEffect(() => {
@@ -740,6 +764,7 @@ function FlowCanvas() {
         onTabAdd={handleNewTab}
         onCloseCurrentTab={() => workspace.handleTabClose(workspace.activeTabId)}
         canCloseTab={workspace.tabs.length > 1}
+        onShare={flowShare.handleOpenShareDialog}
       />
       <div className="w-full h-full pl-16">
         <div className="w-full h-full">
@@ -816,6 +841,20 @@ function FlowCanvas() {
           </div>
         </div>
       )}
+      {isLoadingSharedFlow && (
+        <div className="fixed inset-0 z-[200] bg-gray-950/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-white text-lg font-medium">Loading Suiquence...</p>
+        </div>
+      )}
+      <ShareDialog
+        open={flowShare.shareDialogOpen}
+        onClose={flowShare.handleCloseShareDialog}
+        onShare={flowShare.handleShare}
+        shareUrl={flowShare.shareUrl}
+        isSharing={flowShare.isSharing}
+        isPrivate={flowShare.isPrivateShare}
+      />
       <SuccessModal
         isOpen={!!lastResult}
         onClose={clearResult}
