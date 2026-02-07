@@ -1,7 +1,7 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Landmark, AlertTriangle, X, TrendingUp, Loader2, Plus, Info } from 'lucide-react';
-import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { NodeMenu } from './NodeMenu';
 import { TOKENS, SCALLOP_SCOINS, SCALLOP } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
@@ -16,7 +16,6 @@ function LendNode({ data, id }: NodeProps) {
   const nodes = useNodes();
   const edges = useEdges();
   const nodeData = data as NodeData;
-  const suiClient = useSuiClient();
   const account = useCurrentAccount();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -112,7 +111,7 @@ function LendNode({ data, id }: NodeProps) {
   );
 
   // Query Scallop ObligationKey for borrow/repay action
-  const { data: obligationKeyObjects } = useSuiClientQuery(
+  const { data: _obligationKeyObjects } = useSuiClientQuery(
     'getOwnedObjects',
     {
       owner: account?.address || '',
@@ -162,7 +161,6 @@ function LendNode({ data, id }: NodeProps) {
     return wrappedBal + marketBal;
   }, [wrappedSCoinBalance, marketCoinBalance, sCoinInfo]);
 
-  const canWithdraw = hasPredecessorDeposit || walletSCoinBalance > 0;
   const hasObligation = (obligationObjects?.data?.length ?? 0) > 0;
   const canBorrow = hasObligation || hasPredecessorDeposit;
   const canRepay = hasObligation || hasPredecessorBorrow;

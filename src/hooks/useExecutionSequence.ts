@@ -8,7 +8,7 @@ import type { NodeData } from '@/types';
  * This ensures consistent ordering across the app (nodes, sidebar, execution)
  */
 export function useExecutionSequence() {
-  const nodes = useNodes<NodeData>();
+  const nodes = useNodes() as Node<NodeData>[];
   const edges = useEdges();
 
   const sequence = useMemo(() => {

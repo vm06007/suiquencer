@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useEdges } from '@xyflow/react';
-import { Send, Repeat, Coins, Image, Brain, Code, Landmark } from 'lucide-react';
+import { Send, Repeat, Coins, Brain, Code, Landmark } from 'lucide-react';
 import { NodeMenu } from './NodeMenu';
 import type { ProtocolType, NodeData } from '@/types';
 

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Suiquencer Logo</title>
+  <defs>
+    <linearGradient id="suiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#50E3C2;stop-opacity:1" />
+    </linearGradient>
+    <clipPath id="roundedBg">
+      <rect x="0" y="0" width="512" height="512" rx="100" ry="100" />
+    </clipPath>
+  </defs>
+
+  <!-- Rounded blue background -->
+  <rect x="0" y="0" width="512" height="512" rx="100" ry="100" fill="rgb(38, 99, 235)" />
+
+  <!-- Inactive pads (lighter, semi-transparent white) -->
+  <g fill="rgba(255,255,255,0.55)" stroke="none" transform="translate(64, 64)">
+    <rect x="0" y="0" width="80" height="80" rx="12" />
+    <rect x="96" y="0" width="80" height="80" rx="12" />
+    <rect x="192" y="0" width="80" height="80" rx="12" />
+    <rect x="288" y="0" width="80" height="80" rx="12" />
+    <rect x="0" y="96" width="80" height="80" rx="12" />
+    <rect x="96" y="96" width="80" height="80" rx="12" />
+    <rect x="192" y="96" width="80" height="80" rx="12" />
+    <rect x="288" y="96" width="80" height="80" rx="12" />
+    <rect x="0" y="192" width="80" height="80" rx="12" />
+    <rect x="96" y="192" width="80" height="80" rx="12" />
+    <rect x="192" y="192" width="80" height="80" rx="12" />
+    <rect x="288" y="192" width="80" height="80" rx="12" />
+    <rect x="0" y="288" width="80" height="80" rx="12" />
+    <rect x="96" y="288" width="80" height="80" rx="12" />
+    <rect x="192" y="288" width="80" height="80" rx="12" />
+    <rect x="288" y="288" width="80" height="80" rx="12" />
+  </g>
+
+  <!-- Active pads (gradient highlight) -->
+  <g fill="url(#suiGradient)" stroke="none" transform="translate(64, 64)">
+    <rect x="0" y="96" width="80" height="80" rx="12" />
+    <rect x="96" y="192" width="80" height="80" rx="12" />
+    <rect x="192" y="96" width="80" height="80" rx="12" />
+    <rect x="288" y="192" width="80" height="80" rx="12" />
+  </g>
+</svg>

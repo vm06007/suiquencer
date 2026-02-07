@@ -312,7 +312,7 @@ export function useExecuteSequence() {
 
                 // Execute as devInspect to get the value
                 const result = await suiClient.devInspectTransactionBlock({
-                  transactionBlock: inspectTx,
+                  transactionBlock: inspectTx as any,
                   sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
                 });
 
@@ -445,7 +445,6 @@ export function useExecuteSequence() {
           } else if (node.type === 'lend') {
             // Validate lend/borrow node
             const action = node.data.lendAction || 'deposit';
-            const asset = node.data.lendAsset || 'SUI';
             const amount = parseFloat(node.data.lendAmount || '0');
             const protocol = node.data.lendProtocol || 'scallop';
 
@@ -937,7 +936,7 @@ export function useExecuteSequence() {
                 arguments: [
                   tx.object(SCALLOP.version),
                   tx.object(SCALLOP.market),
-                  marketCoinArg,
+                  marketCoinArg!,
                   tx.object(SCALLOP.clock),
                 ],
               });
@@ -1241,7 +1240,6 @@ export function useExecuteSequence() {
             console.log(`Executing LI.FI bridge: ${asset} from Sui -> ${chain}...`);
 
             let sourceTxHash = '';
-            let bridgeCompleted = false;
 
             for (let attempt = 0; attempt < maxRetries; attempt++) {
               const currentTool = activeRoute.steps?.[0]?.tool || 'unknown';
@@ -1320,7 +1318,6 @@ export function useExecuteSequence() {
                 });
 
                 // Success!
-                bridgeCompleted = true;
                 toast.dismiss('bridge-exec');
                 toast.dismiss('bridge-confirmed');
                 setBridgeStatus(prev => prev ? { ...prev, status: 'done' } : null);
@@ -1353,7 +1350,6 @@ export function useExecuteSequence() {
                 if (sourceTxHash) {
                   setBridgeStatus(prev => prev ? { ...prev, status: 'bridging' } : null);
                   toast.success('Bridge transaction submitted! Track status on LI.FI Explorer.');
-                  bridgeCompleted = true;
                   break;
                 }
 
@@ -1400,7 +1396,7 @@ export function useExecuteSequence() {
                     options: {
                       order: 'RECOMMENDED' as const,
                       denyBridges: deniedBridges,
-                    },
+                    } as any,
                   });
 
                   if (!newRoutes.routes?.length) {

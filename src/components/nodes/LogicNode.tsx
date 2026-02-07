@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState, useEffect } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { memo, useCallback, useState, useEffect } from 'react';
+import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
 import { Brain, Plus, Loader2, CheckCircle, XCircle, ExternalLink, Info } from 'lucide-react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { isValidSuiAddress, isValidSuiNSName } from '@mysten/sui/utils';
@@ -27,8 +27,6 @@ const COMPARISON_OPTIONS: { value: ComparisonOperator; label: string }[] = [
 
 function LogicNode({ data, id }: NodeProps) {
   const { setNodes } = useReactFlow();
-  const nodes = useNodes();
-  const edges = useEdges();
   const nodeData = data as NodeData;
   const suiClient = useSuiClient();
 
@@ -55,73 +53,6 @@ function LogicNode({ data, id }: NodeProps) {
   // Get sequence number from shared hook (uses topological sort)
   const { sequenceMap } = useExecutionSequence();
   const sequenceNumber = sequenceMap.get(id) || 0;
-
-  const sequenceNumber_UNUSED = useMemo(() => {
-    const walletNode = nodes.find((n) => n.type === 'wallet');
-    if (!walletNode) return 0;
-
-    let counter = 0;
-    const visited = new Set<string>();
-
-    const traverse = (nodeId: string): number | null => {
-      if (visited.has(nodeId)) return null;
-      visited.add(nodeId);
-
-      const node = nodes.find((n) => n.id === nodeId);
-
-      if (!node || node.type === 'wallet') {
-        const outgoing = edges.filter((e) => e.source === nodeId);
-        const sortedEdges = outgoing.sort((a, b) => {
-          const targetA = nodes.find((n) => n.id === a.target);
-          const targetB = nodes.find((n) => n.id === b.target);
-          if (!targetA || !targetB) return 0;
-          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
-            return targetA.position.y - targetB.position.y;
-          }
-          return targetA.position.x - targetB.position.x;
-        });
-        for (const edge of sortedEdges) {
-          const result = traverse(edge.target);
-          if (result !== null) return result;
-        }
-        return null;
-      }
-
-      if (node.type === 'selector') {
-        const outgoing = edges.filter((e) => e.source === nodeId);
-        const sortedEdges = outgoing.sort((a, b) => {
-          const targetA = nodes.find((n) => n.id === a.target);
-          const targetB = nodes.find((n) => n.id === b.target);
-          if (!targetA || !targetB) return 0;
-          if (Math.abs(targetA.position.y - targetB.position.y) > 50) {
-            return targetA.position.y - targetB.position.y;
-          }
-          return targetA.position.x - targetB.position.x;
-        });
-        for (const edge of sortedEdges) {
-          const result = traverse(edge.target);
-          if (result !== null) return result;
-        }
-        return null;
-      }
-
-      counter++;
-      if (nodeId === id) {
-        return counter;
-      }
-
-      const outgoing = edges.filter((e) => e.source === nodeId);
-      for (const edge of outgoing) {
-        const result = traverse(edge.target);
-        if (result !== null) return result;
-      }
-
-      return null;
-    };
-
-    traverse(walletNode.id);
-    return counter;
-  }, [id, nodes, edges]);
 
   // Validate SuiNS name
   useEffect(() => {
@@ -378,7 +309,7 @@ function LogicNode({ data, id }: NodeProps) {
 
         // Use devInspectTransactionBlock to execute without sending
         const result = await suiClient.devInspectTransactionBlock({
-          transactionBlock: tx,
+          transactionBlock: tx as any,
           sender: '0x0000000000000000000000000000000000000000000000000000000000000000',
         });
 

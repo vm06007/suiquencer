@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState, useEffect } from 'react';
-import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
+import { memo, useCallback, useState, useEffect } from 'react';
+import { Handle, Position, type NodeProps, useReactFlow } from '@xyflow/react';
 import { Code, Loader2, Info } from 'lucide-react';
 import { useSuiClient } from '@mysten/dapp-kit';
 import { PackageHelper } from '../PackageHelper';
@@ -9,8 +9,6 @@ import type { NodeData } from '@/types';
 
 function CustomNode({ data, id }: NodeProps) {
   const { setNodes } = useReactFlow();
-  const nodes = useNodes();
-  const edges = useEdges();
   const nodeData = data as NodeData;
   const suiClient = useSuiClient();
 

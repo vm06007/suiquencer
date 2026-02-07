@@ -31,7 +31,7 @@ function StakeNode({ data, id }: NodeProps) {
   const protocol = nodeData.stakeProtocol || 'native';
 
   // Fetch SUI balance
-  const { data: suiBalance } = useSuiClientQuery(
+  const { data: _suiBalance } = useSuiClientQuery(
     'getBalance',
     {
       owner: account?.address || '',
