@@ -14,7 +14,7 @@
   <rect x="0" y="0" width="512" height="512" rx="100" ry="100" fill="rgb(38, 99, 235)" />
 
   <!-- Inactive pads (lighter, semi-transparent white) -->
-  <g fill="rgba(255,255,255,0.55)" stroke="none" transform="translate(64, 64)">
+  <g fill="rgba(255,255,255,0.77)" stroke="none" transform="translate(64, 64)">
     <rect x="0" y="0" width="80" height="80" rx="12" />
     <rect x="96" y="0" width="80" height="80" rx="12" />
     <rect x="192" y="0" width="80" height="80" rx="12" />
