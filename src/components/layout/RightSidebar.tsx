@@ -1,4 +1,4 @@
-import { Play, List, X, Trash2, Plus } from 'lucide-react';
+import { Play, List, X, Trash2, Plus, Map } from 'lucide-react';
 import { useState } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '@/types';
@@ -13,9 +13,11 @@ interface RightSidebarProps {
   onInsertNode: () => void;
   canInsert: boolean;
   canDelete: boolean;
+  showMiniMap: boolean;
+  onToggleMiniMap: () => void;
 }
 
-export function RightSidebar({ nodes: _nodes, edges: _edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, canInsert, canDelete }: RightSidebarProps) {
+export function RightSidebar({ nodes: _nodes, edges: _edges, onExecute, isExecuting, onDeleteSelected, onInsertNode, canInsert, canDelete, showMiniMap, onToggleMiniMap }: RightSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   // Get execution sequence from shared hook
@@ -81,6 +83,19 @@ export function RightSidebar({ nodes: _nodes, edges: _edges, onExecute, isExecut
           title="Open Execution Panel"
         >
           <List className="w-5 h-5" />
+        </button>
+
+        {/* Toggle MiniMap Button */}
+        <button
+          onClick={onToggleMiniMap}
+          className={`p-3 rounded-l-lg shadow-lg transition-colors ${
+            showMiniMap
+              ? 'bg-teal-600 hover:bg-teal-700 text-white'
+              : 'bg-gray-400 hover:bg-gray-500 text-white dark:bg-gray-600 dark:hover:bg-gray-500'
+          }`}
+          title={showMiniMap ? 'Hide MiniMap' : 'Show MiniMap'}
+        >
+          <Map className="w-5 h-5" />
         </button>
       </div>
 

@@ -3,6 +3,7 @@ import {
   ReactFlow,
   Background,
   Controls,
+  MiniMap,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -138,6 +139,7 @@ function FlowCanvas() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedEdges, setSelectedEdges] = useState<string[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
+  const [showMiniMap, setShowMiniMap] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { theme, toggleTheme } = useTheme();
@@ -763,6 +765,16 @@ function FlowCanvas() {
               style={{ backgroundColor: theme === 'dark' ? '#030712' : '#f9fafb' }}
             />
             <Controls />
+            {showMiniMap && (
+              <MiniMap
+                nodeStrokeWidth={3}
+                zoomable
+                pannable
+                style={{
+                  backgroundColor: theme === 'dark' ? '#1f2937' : '#f3f4f6',
+                }}
+              />
+            )}
           </ReactFlow>
         </div>
       </div>
@@ -775,6 +787,8 @@ function FlowCanvas() {
         onInsertNode={handleInsertNode}
         canInsert={true}
         canDelete={canDelete}
+        showMiniMap={showMiniMap}
+        onToggleMiniMap={() => setShowMiniMap(prev => !prev)}
       />
       {workspace.showTabCloseConfirm && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4" onClick={workspace.handleTabCloseCancel}>
