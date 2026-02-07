@@ -239,6 +239,62 @@ export function RightSidebar({ nodes: _nodes, edges: _edges, onExecute, isExecut
                             </div>
                           </div>
                         )}
+                        {node.type === 'lend' && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">Protocol:</span>{' '}
+                              <span className="text-orange-600 dark:text-orange-400 font-medium">
+                                {node.data.lendProtocol === 'navi' ? 'Navi' : 'Scallop'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">
+                                {node.data.lendAction === 'borrow' ? 'Borrow:' :
+                                 node.data.lendAction === 'withdraw' ? 'Withdraw:' :
+                                 node.data.lendAction === 'repay' ? 'Repay:' : 'Deposit:'}
+                              </span>{' '}
+                              <span className="text-green-600 dark:text-green-400 font-mono">
+                                {node.data.lendAmount || '0'} {node.data.lendAsset || 'SUI'}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {node.type === 'stake' && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">Protocol:</span>{' '}
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                {node.data.stakeProtocol === 'aftermath' ? 'Aftermath (afSUI)' :
+                                 node.data.stakeProtocol === 'volo' ? 'Volo (vSUI)' : 'Native Staking'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">Stake:</span>{' '}
+                              <span className="text-green-600 dark:text-green-400 font-mono">
+                                {node.data.stakeAmount || '0'} SUI
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {node.type === 'bridge' && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">Bridge:</span>{' '}
+                              <span className="text-green-600 dark:text-green-400 font-mono">
+                                {node.data.bridgeAmount || '0'} {node.data.bridgeAsset || 'SUI'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
+                              <span className="text-gray-500">To:</span>{' '}
+                              <span className="text-purple-600 dark:text-purple-400 font-mono">
+                                {node.data.bridgeOutputAsset || '?'} on {node.data.bridgeChain || '?'}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500 italic">
+                              Via LI.FI (separate tx)
+                            </div>
+                          </div>
+                        )}
                         {node.type === 'custom' && (
                           <div className="space-y-1">
                             <div className="text-xs text-gray-600 dark:text-gray-400">

@@ -1,13 +1,14 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } from '@xyflow/react';
 import { Landmark, AlertTriangle, X, TrendingUp, Loader2, Plus, Info } from 'lucide-react';
-import { useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
+import { useCurrentAccount, useSuiClient, useSuiClientQuery } from '@mysten/dapp-kit';
 import { NodeMenu } from './NodeMenu';
-import { TOKENS, SCALLOP_SCOINS, SCALLOP } from '@/config/tokens';
+import { TOKENS, SCALLOP_SCOINS, SCALLOP, NAVI_POOLS } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import { useLendingAPY } from '@/hooks/useLendingAPY';
 import { useScallopExchangeRate } from '@/hooks/useScallopExchangeRate';
+import { useNaviBorrowLimits } from '@/hooks/useNaviBorrowLimits';
 import type { NodeData } from '@/types';
 import * as Dialog from '@radix-ui/react-dialog';
 
@@ -17,7 +18,9 @@ function LendNode({ data, id }: NodeProps) {
   const edges = useEdges();
   const nodeData = data as NodeData;
   const account = useCurrentAccount();
+  const suiClient = useSuiClient();
   const [showSettings, setShowSettings] = useState(false);
+  const [hasNaviCollateral, setHasNaviCollateral] = useState(false);
 
   // Get wallet balances for all assets
   const selectedAsset = (nodeData.lendAsset || 'SUI') as keyof typeof TOKENS;
@@ -68,8 +71,79 @@ function LendNode({ data, id }: NodeProps) {
     }
   );
 
+  // Navi-only token balances (only queried when Navi protocol is selected)
+  const { data: cetusBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.CETUS.coinType },
+    { enabled: !!account && currentProtocol === 'navi' }
+  );
+
+  const { data: deepBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.DEEP.coinType },
+    { enabled: !!account && currentProtocol === 'navi' }
+  );
+
+  const { data: blueBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BLUE.coinType },
+    { enabled: !!account && currentProtocol === 'navi' }
+  );
+
+  const { data: buckBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BUCK.coinType },
+    { enabled: !!account && currentProtocol === 'navi' }
+  );
+
+  const { data: ausdBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.AUSD.coinType },
+    { enabled: !!account && currentProtocol === 'navi' }
+  );
+
+  // Check if user has any Navi collateral by querying supply balance dynamic fields
+  useEffect(() => {
+    if (!account || currentProtocol !== 'navi') {
+      setHasNaviCollateral(false);
+      return;
+    }
+
+    let cancelled = false;
+    const checkCollateral = async () => {
+      // Check the main collateral pools (SUI, USDC, USDT, WAL) for supply balance
+      const poolsToCheck = ['SUI', 'USDC', 'USDT', 'WAL'];
+      for (const symbol of poolsToCheck) {
+        const pool = NAVI_POOLS[symbol];
+        if (!pool) continue;
+        try {
+          const result = await suiClient.getDynamicFieldObject({
+            parentId: pool.supplyBalanceParentId,
+            name: { type: 'address', value: account.address },
+          });
+          if (!cancelled && result?.data) {
+            setHasNaviCollateral(true);
+            return;
+          }
+        } catch {
+          // Field doesn't exist = no supply balance in this pool
+        }
+      }
+      if (!cancelled) setHasNaviCollateral(false);
+    };
+
+    checkCollateral();
+    return () => { cancelled = true; };
+  }, [account, currentProtocol, suiClient]);
+
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
+
+  // Get borrow limits when action is borrow on Navi
+  const { borrowLimits } = useNaviBorrowLimits(
+    id,
+    currentAction === 'borrow' && currentProtocol === 'navi'
+  );
 
   // Query sCoin balances for withdraw - both SCALLOP_* (wrapped) and MarketCoin (raw)
   const sCoinInfo = SCALLOP_SCOINS[selectedAsset];
@@ -163,7 +237,10 @@ function LendNode({ data, id }: NodeProps) {
   }, [wrappedSCoinBalance, marketCoinBalance, sCoinInfo]);
 
   const hasObligation = (obligationObjects?.data?.length ?? 0) > 0;
-  const canBorrow = hasObligation || hasPredecessorDeposit;
+  // Navi: check on-chain supply balance OR predecessor deposit in flow
+  const canBorrow = currentProtocol === 'navi'
+    ? hasNaviCollateral || hasPredecessorDeposit
+    : hasObligation || hasPredecessorDeposit;
   const canRepay = hasObligation || hasPredecessorBorrow;
 
   // Get APY data for the selected asset and protocol
@@ -207,7 +284,7 @@ function LendNode({ data, id }: NodeProps) {
     const receiptAmount = amount / exchangeRate;
 
     return {
-      amount: receiptAmount.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2),
+      amount: receiptAmount.toFixed(TOKENS[selectedAsset].decimals === 9 ? 4 : 2),
       symbol: getReceiptTokenSymbol(selectedAsset, protocol),
       exchangeRate: exchangeRate.toFixed(4),
       isLoading: protocol === 'scallop' ? scallopExchangeRate.isLoading : false,
@@ -225,20 +302,65 @@ function LendNode({ data, id }: NodeProps) {
 
   // Format balance for dropdown display with effective balance
   const formatBalanceForDropdown = (tokenKey: keyof typeof TOKENS) => {
+    // In borrow mode, show max borrow amount instead of wallet balance
+    if (currentAction === 'borrow' && borrowLimits.length > 0) {
+      const limit = borrowLimits.find(l => l.symbol === tokenKey);
+      if (limit) {
+        const displayDecimals = TOKENS[tokenKey].decimals === 9 ? 4 : 2;
+        return `${tokenKey} (max ~${limit.maxBorrow.toFixed(displayDecimals)})`;
+      }
+      return tokenKey;
+    }
+
     const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
     if (effectiveBal && effectiveBalances.length > 0) {
       const amount = parseFloat(effectiveBal.balance);
-      const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
+      const displayDecimals = TOKENS[tokenKey].decimals === 9 ? 4 : 2;
       return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
     }
     // Fallback to wallet balance
-    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : tokenKey === 'USDT' ? usdtBalance : walBalance;
+    const balanceMap: Record<string, typeof suiBalance> = {
+      SUI: suiBalance, USDC: usdcBalance, USDT: usdtBalance, WAL: walBalance,
+      CETUS: cetusBalance, DEEP: deepBalance, BLUE: blueBalance, BUCK: buckBalance, AUSD: ausdBalance,
+    };
+    const tokenBalance = balanceMap[tokenKey] || null;
     if (!tokenBalance) return tokenKey;
     const decimals = TOKENS[tokenKey].decimals;
     const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
-    const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
+    const displayDecimals = TOKENS[tokenKey].decimals === 9 ? 4 : 2;
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
+
+  // Check if a token has positive balance (effective or wallet)
+  const hasPositiveBalance = useCallback((tokenKey: string) => {
+    const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
+    if (effectiveBal) return parseFloat(effectiveBal.balance) > 0;
+    const balMap: Record<string, typeof suiBalance> = {
+      SUI: suiBalance, USDC: usdcBalance, USDT: usdtBalance, WAL: walBalance,
+      CETUS: cetusBalance, DEEP: deepBalance, BLUE: blueBalance, BUCK: buckBalance, AUSD: ausdBalance,
+    };
+    const bal = balMap[tokenKey];
+    return bal ? Number(bal.totalBalance) > 0 : false;
+  }, [effectiveBalances, suiBalance, usdcBalance, usdtBalance, walBalance, cetusBalance, deepBalance, blueBalance, buckBalance, ausdBalance]);
+
+  // Navi-specific tokens that have a positive balance
+  const visibleNaviTokens = useMemo(() => {
+    return (['CETUS', 'DEEP', 'BLUE', 'BUCK', 'AUSD'] as const).filter(
+      t => t === selectedAsset || hasPositiveBalance(t)
+    );
+  }, [selectedAsset, hasPositiveBalance]);
+
+  // Tokens from predecessor operations (e.g. borrow CETUS) not already in the standard dropdown
+  const extraEffectiveTokens = useMemo(() => {
+    const standardTokens = new Set(['SUI', 'USDC', 'USDT', 'WAL']);
+    if (currentProtocol === 'navi') {
+      ['CETUS', 'DEEP', 'BLUE', 'BUCK', 'AUSD'].forEach(t => standardTokens.add(t));
+    }
+    return effectiveBalances
+      .filter(b => !standardTokens.has(b.symbol) && parseFloat(b.balance) > 0)
+      .map(b => b.symbol)
+      .filter(s => s in TOKENS);
+  }, [effectiveBalances, currentProtocol]);
 
   // Get sequence number from shared hook (uses topological sort)
   const { sequenceMap } = useExecutionSequence();
@@ -251,7 +373,7 @@ function LendNode({ data, id }: NodeProps) {
     const lendAmount = parseFloat(nodeData.lendAmount || '0');
     if (lendAmount <= 0) return null;
 
-    const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
+    const displayDecimals = TOKENS[selectedAsset].decimals === 9 ? 4 : 2;
 
     if (currentAction === 'deposit') {
       // Deposit checks underlying asset balance
@@ -273,11 +395,13 @@ function LendNode({ data, id }: NodeProps) {
         };
       }
     } else if (currentAction === 'borrow') {
-      // Borrow checks if obligation exists
+      // Borrow checks if collateral/obligation exists
       if (!canBorrow) {
         return {
           type: 'error' as const,
-          message: 'No obligation found. You need collateral deposited on Scallop to borrow.',
+          message: currentProtocol === 'navi'
+            ? 'You need collateral deposited on Navi to borrow. Add a deposit node before this one.'
+            : 'No obligation found. You need collateral deposited on Scallop to borrow.',
         };
       }
     } else if (currentAction === 'repay') {
@@ -397,7 +521,9 @@ function LendNode({ data, id }: NodeProps) {
           >
             <option value="deposit">Deposit (Lend)</option>
             <option value="withdraw">Withdraw</option>
-            <option value="borrow" disabled>Borrow (Need PRO Version)</option>
+            <option value="borrow" disabled={currentProtocol !== 'navi'}>
+              {currentProtocol === 'navi' ? 'Borrow' : 'Borrow (Need PRO Version)'}
+            </option>
             <option value="repay" disabled>Repay (Need PRO Version)</option>
           </select>
         </div>
@@ -412,10 +538,31 @@ function LendNode({ data, id }: NodeProps) {
             onChange={(e) => updateNodeData({ lendAsset: e.target.value })}
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-orange-500 dark:focus:border-orange-400"
           >
-            <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
-            <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
-            <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
-            <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
+            {currentAction === 'borrow' && currentProtocol === 'navi' ? (
+              // Borrow mode: show all Navi pool assets with max borrow amounts
+              Object.keys(NAVI_POOLS).map(token => (
+                <option key={token} value={token}>
+                  {formatBalanceForDropdown(token as keyof typeof TOKENS)}
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="SUI">{formatBalanceForDropdown('SUI')}</option>
+                <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
+                <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
+                <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
+                {currentProtocol === 'navi' && visibleNaviTokens.map(token => (
+                  <option key={token} value={token}>
+                    {formatBalanceForDropdown(token)}
+                  </option>
+                ))}
+                {extraEffectiveTokens.map(token => (
+                  <option key={token} value={token}>
+                    {formatBalanceForDropdown(token as keyof typeof TOKENS)}
+                  </option>
+                ))}
+              </>
+            )}
           </select>
 
           {/* APY Display */}
@@ -455,7 +602,7 @@ function LendNode({ data, id }: NodeProps) {
             const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
             if (effectiveBal && effectiveBalances.length > 0) {
               const amount = parseFloat(effectiveBal.balance);
-              const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
+              const displayDecimals = TOKENS[selectedAsset].decimals === 9 ? 4 : 2;
               return (
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Available: {amount.toFixed(displayDecimals)} {selectedAsset}
@@ -475,7 +622,7 @@ function LendNode({ data, id }: NodeProps) {
               );
             }
             const rate = scallopExchangeRate.rate || 1;
-            const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
+            const displayDecimals = TOKENS[selectedAsset].decimals === 9 ? 4 : 2;
             const maxWithdrawable = Math.floor(walletSCoinBalance * rate * Math.pow(10, displayDecimals)) / Math.pow(10, displayDecimals);
             return (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center justify-between">
@@ -502,18 +649,22 @@ function LendNode({ data, id }: NodeProps) {
           })()}
           {currentAction === 'borrow' && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {hasObligation
-                ? `Obligation found — borrow against your collateral`
-                : hasPredecessorDeposit
-                  ? `Collateral from prior deposit in flow`
-                  : `No obligation found`
+              {currentProtocol === 'navi'
+                ? (hasPredecessorDeposit
+                    ? 'Collateral from prior deposit in flow'
+                    : 'Borrow against your existing Navi collateral')
+                : hasObligation
+                  ? `Obligation found — borrow against your collateral`
+                  : hasPredecessorDeposit
+                    ? `Collateral from prior deposit in flow`
+                    : `No obligation found`
               }
             </p>
           )}
           {currentAction === 'repay' && (() => {
             const effectiveBal = effectiveBalances.find(b => b.symbol === selectedAsset);
             const available = effectiveBal ? parseFloat(effectiveBal.balance) : 0;
-            const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
+            const displayDecimals = TOKENS[selectedAsset].decimals === 9 ? 4 : 2;
             return (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {hasObligation
@@ -584,7 +735,7 @@ function LendNode({ data, id }: NodeProps) {
                 <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
                   ~{receiptTokenAmount.amount} {receiptTokenAmount.symbol}
                   <span className="font-normal text-xs text-gray-500 dark:text-gray-400 ml-1">
-                    / {walletSCoinBalance.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2)} available
+                    / {walletSCoinBalance.toFixed(TOKENS[selectedAsset].decimals === 9 ? 4 : 2)} available
                   </span>
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -746,11 +897,23 @@ function LendNode({ data, id }: NodeProps) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {(['SUI', 'USDC', 'USDT', 'WAL'] as const).map((asset) => {
+                      {(nodeData.lendProtocol === 'navi'
+                        ? ['SUI', 'USDC', 'USDT', 'WAL', 'CETUS', 'DEEP', 'BLUE', 'BUCK', 'AUSD'] as const
+                        : ['SUI', 'USDC', 'USDT', 'WAL'] as const
+                      ).map((asset) => {
                         // Get APY for each asset
-                        const protocolData = nodeData.lendProtocol === 'navi'
-                          ? { SUI: { depositAPY: '2.8', borrowAPY: '6.2' }, USDC: { depositAPY: '7.2', borrowAPY: '10.1' }, USDT: { depositAPY: '6.3', borrowAPY: '9.8' }, WAL: { depositAPY: '11.8', borrowAPY: '17.5' } }
-                          : { SUI: { depositAPY: '3.15', borrowAPY: '5.8' }, USDC: { depositAPY: '6.5', borrowAPY: '9.2' }, USDT: { depositAPY: '5.8', borrowAPY: '8.5' }, WAL: { depositAPY: '12.4', borrowAPY: '18.7' } };
+                        const naviData: Record<string, { depositAPY: string; borrowAPY: string }> = {
+                          SUI: { depositAPY: '2.8', borrowAPY: '6.2' }, USDC: { depositAPY: '7.2', borrowAPY: '10.1' },
+                          USDT: { depositAPY: '6.3', borrowAPY: '9.8' }, WAL: { depositAPY: '11.8', borrowAPY: '17.5' },
+                          CETUS: { depositAPY: '1.3', borrowAPY: '8.7' }, DEEP: { depositAPY: '2.1', borrowAPY: '9.2' },
+                          BLUE: { depositAPY: '1.8', borrowAPY: '7.5' }, BUCK: { depositAPY: '4.2', borrowAPY: '8.1' },
+                          AUSD: { depositAPY: '5.5', borrowAPY: '9.0' },
+                        };
+                        const scallopData: Record<string, { depositAPY: string; borrowAPY: string }> = {
+                          SUI: { depositAPY: '3.15', borrowAPY: '5.8' }, USDC: { depositAPY: '6.5', borrowAPY: '9.2' },
+                          USDT: { depositAPY: '5.8', borrowAPY: '8.5' }, WAL: { depositAPY: '12.4', borrowAPY: '18.7' },
+                        };
+                        const protocolData = nodeData.lendProtocol === 'navi' ? naviData : scallopData;
                         const assetAPY = protocolData[asset];
                         return (
                           <tr key={asset} className={selectedAsset === asset ? 'bg-orange-50 dark:bg-orange-900/10' : ''}>

@@ -69,6 +69,41 @@ function SwapNode({ data, id }: NodeProps) {
     }
   );
 
+  const { data: cetusBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.CETUS.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: deepBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.DEEP.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: blueBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BLUE.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: buckBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BUCK.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: ausdBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.AUSD.coinType },
+    { enabled: !!account }
+  );
+
+  const swapBalanceMap: Record<string, typeof suiBalance> = {
+    SUI: suiBalance, USDC: usdcBalance, USDT: usdtBalance, WAL: walBalance,
+    CETUS: cetusBalance, DEEP: deepBalance, BLUE: blueBalance, BUCK: buckBalance, AUSD: ausdBalance,
+  };
+
   // Get balance for the from asset (needed for per-asset cumulative)
   const fromAsset = (nodeData.fromAsset || 'SUI') as keyof typeof TOKENS;
 
@@ -160,7 +195,7 @@ function SwapNode({ data, id }: NodeProps) {
     return { cumulativeAmount: cumulative, totalAmount: total };
   }, [id, nodes, edges, fromAsset]);
 
-  const fromBalance = fromAsset === 'SUI' ? suiBalance : fromAsset === 'USDC' ? usdcBalance : fromAsset === 'USDT' ? usdtBalance : walBalance;
+  const fromBalance = swapBalanceMap[fromAsset] || null;
 
   // Check balance validation for from asset (reserve SUI for gas when spending native SUI)
   const balanceWarning = useMemo(() => {
@@ -228,19 +263,36 @@ function SwapNode({ data, id }: NodeProps) {
 
   const formatBalanceForDropdown = (tokenKey: keyof typeof TOKENS) => {
     const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
+    const displayDecimals = TOKENS[tokenKey].decimals === 9 ? 4 : 2;
     if (effectiveBal && effectiveBalances.length > 0) {
       const amount = parseFloat(effectiveBal.balance);
-      const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
       return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
     }
     // Fallback to wallet balance
-    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : tokenKey === 'USDT' ? usdtBalance : walBalance;
+    const tokenBalance = swapBalanceMap[tokenKey] || null;
     if (!tokenBalance) return tokenKey;
-    const decimals = TOKENS[tokenKey].decimals;
-    const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
-    const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
+    const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, TOKENS[tokenKey].decimals);
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
+
+  // Tokens from predecessor operations or wallet not in the standard 4
+  const extraTokens = useMemo(() => {
+    const standardTokens = new Set(['SUI', 'USDC', 'USDT', 'WAL']);
+    const extras: string[] = [];
+    // From effective balances (predecessor operations)
+    for (const b of effectiveBalances) {
+      if (!standardTokens.has(b.symbol) && parseFloat(b.balance) > 0 && b.symbol in TOKENS) {
+        extras.push(b.symbol);
+      }
+    }
+    // Also from wallet balances (user holds them)
+    for (const [key, bal] of Object.entries(swapBalanceMap)) {
+      if (!standardTokens.has(key) && bal && Number(bal.totalBalance) > 0 && !extras.includes(key)) {
+        extras.push(key);
+      }
+    }
+    return extras;
+  }, [effectiveBalances, swapBalanceMap]);
 
   const updateNodeData = useCallback((updates: Partial<NodeData>) => {
     setNodes((nds) =>
@@ -259,12 +311,12 @@ function SwapNode({ data, id }: NodeProps) {
 
     if (from === to) {
       // Auto-select a different toAsset
-      const availableTokens = (['SUI', 'USDC', 'USDT', 'WAL'] as const).filter(token => token !== from);
+      const availableTokens = ['SUI', 'USDC', 'USDT', 'WAL', ...extraTokens].filter(token => token !== from);
       if (availableTokens.length > 0) {
         updateNodeData({ toAsset: availableTokens[0] });
       }
     }
-  }, [nodeData.fromAsset, nodeData.toAsset, updateNodeData]);
+  }, [nodeData.fromAsset, nodeData.toAsset, updateNodeData, extraTokens]);
 
   // Store estimated output in node data for downstream nodes
   useEffect(() => {
@@ -399,6 +451,11 @@ function SwapNode({ data, id }: NodeProps) {
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
             <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
             <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
+            {extraTokens.map(token => (
+              <option key={token} value={token}>
+                {formatBalanceForDropdown(token as keyof typeof TOKENS)}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -438,11 +495,11 @@ function SwapNode({ data, id }: NodeProps) {
             onChange={(e) => updateNodeData({ toAsset: e.target.value })}
             className="w-full px-2 py-1.5 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded text-sm focus:outline-none focus:border-blue-500 dark:focus:border-blue-400"
           >
-            {(['SUI', 'USDC', 'USDT', 'WAL'] as const)
+            {(['SUI', 'USDC', 'USDT', 'WAL', ...extraTokens] as string[])
               .filter(token => token !== (nodeData.fromAsset || 'SUI'))
               .map(token => (
                 <option key={token} value={token}>
-                  {formatBalanceForDropdown(token)}
+                  {formatBalanceForDropdown(token as keyof typeof TOKENS)}
                 </option>
               ))
             }

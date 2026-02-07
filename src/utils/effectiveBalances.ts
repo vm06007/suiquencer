@@ -157,5 +157,18 @@ export function getEffectiveBalances(
     return { symbol: t.symbol, balance: formatted, isLoading: false };
   });
 
+  // Include tokens introduced by predecessor operations (e.g. borrow CETUS, swap output)
+  // that aren't already in baseBalances
+  const baseSymbols = new Set(baseBalances.map((b) => b.symbol));
+  for (const [symbol, value] of Object.entries(balances)) {
+    if (!baseSymbols.has(symbol) && value > 0) {
+      baseResult.push({
+        symbol,
+        balance: value < 0.01 ? value.toFixed(6) : value.toFixed(4),
+        isLoading: false,
+      });
+    }
+  }
+
   return baseResult;
 }

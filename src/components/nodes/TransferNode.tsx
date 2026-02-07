@@ -72,8 +72,42 @@ function TransferNode({ data, id }: NodeProps) {
     }
   );
 
+  const { data: cetusBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.CETUS.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: deepBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.DEEP.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: blueBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BLUE.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: buckBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BUCK.coinType },
+    { enabled: !!account }
+  );
+
+  const { data: ausdBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.AUSD.coinType },
+    { enabled: !!account }
+  );
+
   // Get the balance for the selected asset
-  const balance = selectedAsset === 'SUI' ? suiBalance : selectedAsset === 'USDC' ? usdcBalance : selectedAsset === 'USDT' ? usdtBalance : walBalance;
+  const balanceMap: Record<string, typeof suiBalance> = {
+    SUI: suiBalance, USDC: usdcBalance, USDT: usdtBalance, WAL: walBalance,
+    CETUS: cetusBalance, DEEP: deepBalance, BLUE: blueBalance, BUCK: buckBalance, AUSD: ausdBalance,
+  };
+  const balance = balanceMap[selectedAsset] || null;
 
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
@@ -81,19 +115,26 @@ function TransferNode({ data, id }: NodeProps) {
   // Format balance for dropdown display with effective balance
   const formatBalanceForDropdown = (tokenKey: keyof typeof TOKENS) => {
     const effectiveBal = effectiveBalances.find(b => b.symbol === tokenKey);
+    const displayDecimals = TOKENS[tokenKey].decimals === 9 ? 4 : 2;
     if (effectiveBal && effectiveBalances.length > 0) {
       const amount = parseFloat(effectiveBal.balance);
-      const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
       return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
     }
     // Fallback to wallet balance
-    const tokenBalance = tokenKey === 'SUI' ? suiBalance : tokenKey === 'USDC' ? usdcBalance : tokenKey === 'USDT' ? usdtBalance : walBalance;
+    const tokenBalance = balanceMap[tokenKey] || null;
     if (!tokenBalance) return tokenKey;
-    const decimals = TOKENS[tokenKey].decimals;
-    const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, decimals);
-    const displayDecimals = tokenKey === 'SUI' || tokenKey === 'WAL' ? 4 : 2;
+    const amount = parseInt(tokenBalance.totalBalance) / Math.pow(10, TOKENS[tokenKey].decimals);
     return `${tokenKey} (${amount.toFixed(displayDecimals)})`;
   };
+
+  // Tokens from predecessor operations not already in the standard dropdown
+  const extraEffectiveTokens = useMemo(() => {
+    const standardTokens = new Set(['SUI', 'USDC', 'USDT', 'WAL']);
+    return effectiveBalances
+      .filter(b => !standardTokens.has(b.symbol) && parseFloat(b.balance) > 0)
+      .map(b => b.symbol)
+      .filter(s => s in TOKENS);
+  }, [effectiveBalances]);
 
   // Get sequence number from shared hook (uses topological sort)
   const { sequenceMap } = useExecutionSequence();
@@ -374,6 +415,11 @@ function TransferNode({ data, id }: NodeProps) {
             <option value="USDC">{formatBalanceForDropdown('USDC')}</option>
             <option value="USDT">{formatBalanceForDropdown('USDT')}</option>
             <option value="WAL">{formatBalanceForDropdown('WAL')}</option>
+            {extraEffectiveTokens.map(token => (
+              <option key={token} value={token}>
+                {formatBalanceForDropdown(token as keyof typeof TOKENS)}
+              </option>
+            ))}
           </select>
         </div>
 

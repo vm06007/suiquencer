@@ -56,50 +56,67 @@ export function useEffectiveBalances(nodeId: string, enabled: boolean = true) {
     }
   );
 
+  // Navi-specific token balances
+  const { data: cetusBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.CETUS.coinType },
+    { enabled: !!account && enabled }
+  );
+
+  const { data: deepBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.DEEP.coinType },
+    { enabled: !!account && enabled }
+  );
+
+  const { data: blueBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BLUE.coinType },
+    { enabled: !!account && enabled }
+  );
+
+  const { data: buckBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BUCK.coinType },
+    { enabled: !!account && enabled }
+  );
+
+  const { data: ausdBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.AUSD.coinType },
+    { enabled: !!account && enabled }
+  );
+
   // Calculate base balances
   const baseBalances: TokenBalance[] = useMemo(() => {
     if (!account) return [];
 
     const balances: TokenBalance[] = [];
 
-    if (suiBalance) {
-      const amount = parseInt(suiBalance.totalBalance) / Math.pow(10, TOKENS.SUI.decimals);
-      balances.push({
-        symbol: 'SUI',
-        balance: amount.toFixed(4),
-        isLoading: false,
-      });
-    }
+    const addBalance = (
+      symbol: string,
+      data: typeof suiBalance,
+      decimals: number,
+      displayDecimals: number
+    ) => {
+      if (data) {
+        const amount = parseInt(data.totalBalance) / Math.pow(10, decimals);
+        balances.push({ symbol, balance: amount.toFixed(displayDecimals), isLoading: false });
+      }
+    };
 
-    if (usdcBalance) {
-      const amount = parseInt(usdcBalance.totalBalance) / Math.pow(10, TOKENS.USDC.decimals);
-      balances.push({
-        symbol: 'USDC',
-        balance: amount.toFixed(2),
-        isLoading: false,
-      });
-    }
-
-    if (usdtBalance) {
-      const amount = parseInt(usdtBalance.totalBalance) / Math.pow(10, TOKENS.USDT.decimals);
-      balances.push({
-        symbol: 'USDT',
-        balance: amount.toFixed(2),
-        isLoading: false,
-      });
-    }
-
-    if (walBalance) {
-      const amount = parseInt(walBalance.totalBalance) / Math.pow(10, TOKENS.WAL.decimals);
-      balances.push({
-        symbol: 'WAL',
-        balance: amount.toFixed(4),
-        isLoading: false,
-      });
-    }
+    addBalance('SUI', suiBalance, TOKENS.SUI.decimals, 4);
+    addBalance('USDC', usdcBalance, TOKENS.USDC.decimals, 2);
+    addBalance('USDT', usdtBalance, TOKENS.USDT.decimals, 2);
+    addBalance('WAL', walBalance, TOKENS.WAL.decimals, 4);
+    addBalance('CETUS', cetusBalance, TOKENS.CETUS.decimals, 4);
+    addBalance('DEEP', deepBalance, TOKENS.DEEP.decimals, 4);
+    addBalance('BLUE', blueBalance, TOKENS.BLUE.decimals, 4);
+    addBalance('BUCK', buckBalance, TOKENS.BUCK.decimals, 4);
+    addBalance('AUSD', ausdBalance, TOKENS.AUSD.decimals, 2);
 
     return balances;
-  }, [account, suiBalance, usdcBalance, usdtBalance, walBalance]);
+  }, [account, suiBalance, usdcBalance, usdtBalance, walBalance, cetusBalance, deepBalance, blueBalance, buckBalance, ausdBalance]);
 
   // Get sequence map for proper ordering
   const { sequenceMap } = useExecutionSequence();

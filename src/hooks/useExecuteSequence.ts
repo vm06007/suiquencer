@@ -30,6 +30,56 @@ const EVM_TOKEN_ADDRESSES: Record<string, Record<number, string>> = {
 import type { Node } from '@xyflow/react';
 import type { NodeData, ComparisonOperator } from '@/types';
 
+/**
+ * Acquire a non-SUI coin for use in a transaction step.
+ * Checks intermediateCoins first (from prior borrow/withdraw in this atomic tx),
+ * then falls back to fetching from wallet.
+ */
+async function acquireNonSuiCoin(
+  tx: Transaction,
+  suiClient: any,
+  ownerAddress: string,
+  coinType: string,
+  amountInSmallestUnit: number,
+  intermediateCoins: Map<string, any>,
+  stepLabel: string,
+  assetSymbol: string,
+) {
+  // Check intermediate coins from prior steps in this atomic transaction
+  const intermediateCoin = intermediateCoins.get(coinType);
+  if (intermediateCoin) {
+    console.log(`${stepLabel}: Using intermediate ${assetSymbol} from prior step in this transaction`);
+    const [coin] = tx.splitCoins(intermediateCoin, [amountInSmallestUnit]);
+    return coin;
+  }
+
+  // Fall back to fetching from wallet
+  console.log(`${stepLabel}: Fetching ${assetSymbol} coins from wallet...`);
+  const coins = await suiClient.getCoins({ owner: ownerAddress, coinType });
+  if (!coins.data || coins.data.length === 0) {
+    throw new Error(`${stepLabel}: No ${assetSymbol} coins found in wallet`);
+  }
+  const totalBalance = coins.data.reduce((sum: bigint, c: any) => sum + BigInt(c.balance), BigInt(0));
+  if (totalBalance < BigInt(amountInSmallestUnit)) {
+    throw new Error(`${stepLabel}: Insufficient ${assetSymbol} balance`);
+  }
+  let remaining = BigInt(amountInSmallestUnit);
+  const selected: string[] = [];
+  for (const c of coins.data) {
+    if (remaining <= 0n) break;
+    selected.push(c.coinObjectId);
+    remaining -= BigInt(c.balance);
+  }
+  if (selected.length > 1) {
+    const [primary, ...rest] = selected;
+    tx.mergeCoins(tx.object(primary), rest.map(id => tx.object(id)));
+    const [coin] = tx.splitCoins(tx.object(primary), [amountInSmallestUnit]);
+    return coin;
+  }
+  const [coin] = tx.splitCoins(tx.object(selected[0]), [amountInSmallestUnit]);
+  return coin;
+}
+
 export interface BridgeProcessInfo {
   type: string;
   status: string;
@@ -456,8 +506,8 @@ export function useExecuteSequence() {
               throw new Error(`Step ${i + 1}: Only Scallop and Navi protocols are supported currently`);
             }
 
-            if (protocol === 'navi' && (action === 'borrow' || action === 'repay')) {
-              throw new Error(`Step ${i + 1}: Navi borrow/repay is not yet supported. Use deposit or withdraw.`);
+            if (protocol === 'navi' && action === 'repay') {
+              throw new Error(`Step ${i + 1}: Navi repay is not yet supported.`);
             }
 
             if (action !== 'deposit' && action !== 'withdraw' && action !== 'borrow' && action !== 'repay') {
@@ -528,6 +578,10 @@ export function useExecuteSequence() {
 
         // Build all operations into the single transaction block
         let actualStepCount = 0;
+        // Track intermediate coins produced by borrow/withdraw within this atomic tx
+        // so subsequent deposit/transfer steps can use them instead of fetching from wallet
+        const intermediateCoins = new Map<string, any>();
+
         for (let i = 0; i < sequence.length; i++) {
           const node = sequence[i];
 
@@ -586,50 +640,11 @@ export function useExecuteSequence() {
               tx.transferObjects([coin], recipientAddress);
               console.log(`Added step ${i + 1}: Transfer ${amount} ${asset} to ${recipientAddress.slice(0, 10)}...`);
             } else {
-              // For USDC/USDT, select coins from the user's wallet
-              console.log(`Fetching ${asset} coins for transfer...`);
-
-              const coins = await suiClient.getCoins({
-                owner: account.address,
-                coinType: tokenInfo.coinType,
-              });
-
-              if (!coins.data || coins.data.length === 0) {
-                throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet`);
-              }
-
-              // Calculate total available balance
-              const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-
-              if (totalBalance < BigInt(amountInSmallestUnit)) {
-                throw new Error(`Step ${i + 1}: Insufficient ${asset} balance`);
-              }
-
-              // Select coins to cover the amount
-              let remainingAmount = BigInt(amountInSmallestUnit);
-              const selectedCoins: string[] = [];
-
-              for (const coin of coins.data) {
-                if (remainingAmount <= 0) break;
-                selectedCoins.push(coin.coinObjectId);
-                remainingAmount -= BigInt(coin.balance);
-              }
-
-              // If we need multiple coins, merge them first
-              if (selectedCoins.length > 1) {
-                const [primaryCoin, ...coinsToMerge] = selectedCoins;
-                tx.mergeCoins(
-                  tx.object(primaryCoin),
-                  coinsToMerge.map(coin => tx.object(coin))
-                );
-                const [coinToTransfer] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
-                tx.transferObjects([coinToTransfer], recipientAddress);
-              } else {
-                // Single coin is enough
-                const [coinToTransfer] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
-                tx.transferObjects([coinToTransfer], recipientAddress);
-              }
-
+              const coinToTransfer = await acquireNonSuiCoin(
+                tx, suiClient, account.address, tokenInfo.coinType,
+                amountInSmallestUnit, intermediateCoins, `Step ${i + 1}`, asset
+              );
+              tx.transferObjects([coinToTransfer], recipientAddress);
               console.log(`Added step ${i + 1}: Transfer ${amount} ${asset} to ${recipientAddress.slice(0, 10)}...`);
             }
           } else if (node.type === 'swap') {
@@ -672,38 +687,10 @@ export function useExecuteSequence() {
             if (fromAsset === 'SUI') {
               [inputCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
             } else {
-              const coins = await suiClient.getCoins({
-                owner: account.address,
-                coinType: fromToken.coinType,
-              });
-
-              if (!coins.data || coins.data.length === 0) {
-                throw new Error(`Step ${i + 1}: No ${fromAsset} coins found in wallet`);
-              }
-
-              const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-              if (totalBalance < BigInt(amountInSmallestUnit)) {
-                throw new Error(`Step ${i + 1}: Insufficient ${fromAsset} balance`);
-              }
-
-              let remainingAmount = BigInt(amountInSmallestUnit);
-              const selectedCoins: string[] = [];
-              for (const coin of coins.data) {
-                if (remainingAmount <= 0) break;
-                selectedCoins.push(coin.coinObjectId);
-                remainingAmount -= BigInt(coin.balance);
-              }
-
-              if (selectedCoins.length > 1) {
-                const [primaryCoin, ...coinsToMerge] = selectedCoins;
-                tx.mergeCoins(
-                  tx.object(primaryCoin),
-                  coinsToMerge.map(coin => tx.object(coin))
-                );
-                [inputCoin] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
-              } else {
-                [inputCoin] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
-              }
+              inputCoin = await acquireNonSuiCoin(
+                tx, suiClient, account.address, fromToken.coinType,
+                amountInSmallestUnit, intermediateCoins, `Step ${i + 1}`, fromAsset as string
+              );
             }
 
             // Use SDK routerSwap to build swap (handles all DEXes, Pyth, slippage)
@@ -809,7 +796,15 @@ export function useExecuteSequence() {
 
             if (protocol === 'scallop' && action === 'deposit') {
               // Scallop deposit (mint)
-              const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+              let depositCoin;
+              if (asset === 'SUI') {
+                [depositCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+              } else {
+                depositCoin = await acquireNonSuiCoin(
+                  tx, suiClient, account.address, tokenInfo.coinType,
+                  amountInSmallestUnit, intermediateCoins, `Step ${i + 1}`, asset
+                );
+              }
 
               tx.moveCall({
                 target: `${SCALLOP.protocolPkg}::mint::mint_entry`,
@@ -817,7 +812,7 @@ export function useExecuteSequence() {
                 arguments: [
                   tx.object(SCALLOP.version),
                   tx.object(SCALLOP.market),
-                  coin,
+                  depositCoin,
                   tx.object(SCALLOP.clock),
                 ],
               });
@@ -1058,38 +1053,10 @@ export function useExecuteSequence() {
               if (asset === 'SUI') {
                 [repayCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
               } else {
-                const coins = await suiClient.getCoins({
-                  owner: account.address,
-                  coinType: tokenInfo.coinType,
-                });
-
-                if (!coins.data || coins.data.length === 0) {
-                  throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet for repayment`);
-                }
-
-                const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-                if (totalBalance < BigInt(amountInSmallestUnit)) {
-                  throw new Error(`Step ${i + 1}: Insufficient ${asset} balance for repayment`);
-                }
-
-                let remainingAmount = BigInt(amountInSmallestUnit);
-                const selectedCoins: string[] = [];
-                for (const coin of coins.data) {
-                  if (remainingAmount <= 0) break;
-                  selectedCoins.push(coin.coinObjectId);
-                  remainingAmount -= BigInt(coin.balance);
-                }
-
-                if (selectedCoins.length > 1) {
-                  const [primaryCoin, ...coinsToMerge] = selectedCoins;
-                  tx.mergeCoins(
-                    tx.object(primaryCoin),
-                    coinsToMerge.map(c => tx.object(c))
-                  );
-                  [repayCoin] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
-                } else {
-                  [repayCoin] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
-                }
+                repayCoin = await acquireNonSuiCoin(
+                  tx, suiClient, account.address, tokenInfo.coinType,
+                  amountInSmallestUnit, intermediateCoins, `Step ${i + 1}`, asset
+                );
               }
 
               tx.moveCall({
@@ -1117,36 +1084,10 @@ export function useExecuteSequence() {
               if (asset === 'SUI') {
                 [depositCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
               } else {
-                // Fetch non-SUI coins, merge and split
-                const coins = await suiClient.getCoins({
-                  owner: account.address,
-                  coinType: tokenInfo.coinType,
-                });
-
-                if (!coins.data || coins.data.length === 0) {
-                  throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet`);
-                }
-
-                const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-                if (totalBalance < BigInt(amountInSmallestUnit)) {
-                  throw new Error(`Step ${i + 1}: Insufficient ${asset} balance`);
-                }
-
-                let remainingAmount = BigInt(amountInSmallestUnit);
-                const selectedCoins: string[] = [];
-                for (const coin of coins.data) {
-                  if (remainingAmount <= 0) break;
-                  selectedCoins.push(coin.coinObjectId);
-                  remainingAmount -= BigInt(coin.balance);
-                }
-
-                if (selectedCoins.length > 1) {
-                  const [primaryCoin, ...coinsToMerge] = selectedCoins;
-                  tx.mergeCoins(tx.object(primaryCoin), coinsToMerge.map(c => tx.object(c)));
-                  [depositCoin] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
-                } else {
-                  [depositCoin] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
-                }
+                depositCoin = await acquireNonSuiCoin(
+                  tx, suiClient, account.address, tokenInfo.coinType,
+                  amountInSmallestUnit, intermediateCoins, `Step ${i + 1}`, asset
+                );
               }
 
               tx.moveCall({
@@ -1196,10 +1137,56 @@ export function useExecuteSequence() {
                 arguments: [withdrawnBalance],
               });
 
-              // Transfer coin to the user
-              tx.transferObjects([withdrawnCoin], account.address);
+              // Store as intermediate coin for potential use by subsequent steps
+              const existingWithdrawCoin = intermediateCoins.get(tokenInfo.coinType);
+              if (existingWithdrawCoin) {
+                tx.mergeCoins(existingWithdrawCoin, [withdrawnCoin]);
+              } else {
+                intermediateCoins.set(tokenInfo.coinType, withdrawnCoin);
+              }
 
-              console.log(`Added step ${i + 1}: Navi withdraw ${amount} ${asset} (pool: ${naviPool.poolId.slice(0, 10)}...)`);
+              console.log(`Added step ${i + 1}: Navi withdraw ${amount} ${asset} → intermediate coin`);
+
+            } else if (protocol === 'navi' && action === 'borrow') {
+              // Navi borrow: borrow_v2<T> returns Balance<T>, needs coin::from_balance + transfer
+              // Same signature as withdraw_v2
+              const naviPool = getNaviPool(asset);
+              if (!naviPool) {
+                throw new Error(`Step ${i + 1}: Asset ${asset} is not supported on Navi Protocol`);
+              }
+
+              const borrowedBalance = tx.moveCall({
+                target: `${NAVI.packageId}::incentive_v3::borrow_v2`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(NAVI.clock),
+                  tx.object(NAVI.priceOracle),
+                  tx.object(NAVI.storage),
+                  tx.object(naviPool.poolId),
+                  tx.pure.u8(naviPool.assetId),
+                  tx.pure.u64(amountInSmallestUnit),
+                  tx.object(NAVI.incentiveV2),
+                  tx.object(NAVI.incentiveV3),
+                  tx.object('0x5'), // SUI System State
+                ],
+              });
+
+              // Convert Balance<T> → Coin<T>
+              const borrowedCoin = tx.moveCall({
+                target: '0x2::coin::from_balance',
+                typeArguments: [tokenInfo.coinType],
+                arguments: [borrowedBalance],
+              });
+
+              // Store as intermediate coin for potential use by subsequent steps
+              const existingBorrowCoin = intermediateCoins.get(tokenInfo.coinType);
+              if (existingBorrowCoin) {
+                tx.mergeCoins(existingBorrowCoin, [borrowedCoin]);
+              } else {
+                intermediateCoins.set(tokenInfo.coinType, borrowedCoin);
+              }
+
+              console.log(`Added step ${i + 1}: Navi borrow ${amount} ${asset} → intermediate coin`);
             }
           } else if (node.type === 'stake') {
             // Execute staking operation
@@ -1294,6 +1281,13 @@ export function useExecuteSequence() {
             }
           }
         }
+
+        // Transfer any remaining intermediate coins to the user
+        for (const [coinType, coin] of intermediateCoins) {
+          tx.transferObjects([coin], account.address);
+          console.log(`Transferring remaining intermediate coin (${coinType.slice(0, 30)}...) to user`);
+        }
+        intermediateCoins.clear();
 
         // Check if all operations were skipped (no Sui ops and no bridge ops)
         if (actualStepCount === 0 && bridgeNodes.length === 0) {

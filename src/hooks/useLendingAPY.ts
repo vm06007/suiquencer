@@ -5,12 +5,7 @@ interface APYData {
   borrowAPY: string;
 }
 
-interface ProtocolAPYs {
-  SUI: APYData;
-  USDC: APYData;
-  USDT: APYData;
-  WAL: APYData;
-}
+type ProtocolAPYs = Record<string, APYData>;
 
 // Mock APY data - replace with real API calls later
 const MOCK_APYS: Record<string, ProtocolAPYs> = {
@@ -25,6 +20,11 @@ const MOCK_APYS: Record<string, ProtocolAPYs> = {
     USDC: { depositAPY: '7.2', borrowAPY: '10.1' },
     USDT: { depositAPY: '6.3', borrowAPY: '9.8' },
     WAL: { depositAPY: '11.8', borrowAPY: '17.5' },
+    CETUS: { depositAPY: '1.3', borrowAPY: '8.7' },
+    DEEP: { depositAPY: '2.1', borrowAPY: '9.2' },
+    BLUE: { depositAPY: '1.8', borrowAPY: '7.5' },
+    BUCK: { depositAPY: '4.2', borrowAPY: '8.1' },
+    AUSD: { depositAPY: '5.5', borrowAPY: '9.0' },
   },
 };
 
@@ -47,7 +47,7 @@ export function useLendingAPY(
     // Simulate API delay
     const timeoutId = setTimeout(() => {
       const protocolData = MOCK_APYS[protocol] || MOCK_APYS.scallop;
-      const assetData = protocolData[asset as keyof ProtocolAPYs] || protocolData.SUI;
+      const assetData = protocolData[asset] || protocolData.SUI;
       setApy(assetData);
       setIsLoading(false);
     }, 100);

@@ -56,6 +56,41 @@ export function WalletConnect() {
     }
   );
 
+  // Get CETUS balance
+  const { data: cetusBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.CETUS.coinType },
+    { enabled: !!account }
+  );
+
+  // Get DEEP balance
+  const { data: deepBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.DEEP.coinType },
+    { enabled: !!account }
+  );
+
+  // Get BLUE balance
+  const { data: blueBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BLUE.coinType },
+    { enabled: !!account }
+  );
+
+  // Get BUCK balance
+  const { data: buckBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.BUCK.coinType },
+    { enabled: !!account }
+  );
+
+  // Get AUSD balance
+  const { data: ausdBalance } = useSuiClientQuery(
+    'getBalance',
+    { owner: account?.address || '', coinType: TOKENS.AUSD.coinType },
+    { enabled: !!account }
+  );
+
   const formatBalance = (balance: string, decimals: number) => {
     const amount = Number(balance) / Math.pow(10, decimals);
     return amount.toFixed(decimals === 9 ? 4 : 2);
@@ -97,6 +132,31 @@ export function WalletConnect() {
             {walBalance && Number(walBalance.totalBalance) > 0 && (
               <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
                 {formatBalance(walBalance.totalBalance, TOKENS.WAL.decimals)} WAL
+              </div>
+            )}
+            {cetusBalance && Number(cetusBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {formatBalance(cetusBalance.totalBalance, TOKENS.CETUS.decimals)} CETUS
+              </div>
+            )}
+            {deepBalance && Number(deepBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {formatBalance(deepBalance.totalBalance, TOKENS.DEEP.decimals)} DEEP
+              </div>
+            )}
+            {blueBalance && Number(blueBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {formatBalance(blueBalance.totalBalance, TOKENS.BLUE.decimals)} BLUE
+              </div>
+            )}
+            {buckBalance && Number(buckBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {formatBalance(buckBalance.totalBalance, TOKENS.BUCK.decimals)} BUCK
+              </div>
+            )}
+            {ausdBalance && Number(ausdBalance.totalBalance) > 0 && (
+              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {formatBalance(ausdBalance.totalBalance, TOKENS.AUSD.decimals)} AUSD
               </div>
             )}
           </div>
