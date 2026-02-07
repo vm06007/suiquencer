@@ -22,6 +22,7 @@ function LendNode({ data, id }: NodeProps) {
   // Get wallet balances for all assets
   const selectedAsset = (nodeData.lendAsset || 'SUI') as keyof typeof TOKENS;
   const currentAction = nodeData.lendAction || 'deposit';
+  const currentProtocol = nodeData.lendProtocol || 'scallop';
 
   const { data: suiBalance } = useSuiClientQuery(
     'getBalance',
@@ -81,7 +82,7 @@ function LendNode({ data, id }: NodeProps) {
       coinType: sCoinInfo?.sCoinType || '',
     },
     {
-      enabled: !!account && !!sCoinInfo?.sCoinType,
+      enabled: !!account && !!sCoinInfo?.sCoinType && currentProtocol === 'scallop',
     }
   );
 
@@ -93,7 +94,7 @@ function LendNode({ data, id }: NodeProps) {
       coinType: sCoinInfo?.marketCoinType || '',
     },
     {
-      enabled: !!account && !!sCoinInfo?.marketCoinType,
+      enabled: !!account && !!sCoinInfo?.marketCoinType && currentProtocol === 'scallop',
     }
   );
   const { data: obligationObjects } = useSuiClientQuery(
@@ -106,7 +107,7 @@ function LendNode({ data, id }: NodeProps) {
       options: { showContent: true },
     },
     {
-      enabled: !!account && (currentAction === 'borrow' || currentAction === 'repay'),
+      enabled: !!account && (currentAction === 'borrow' || currentAction === 'repay') && currentProtocol === 'scallop',
     }
   );
 
@@ -121,7 +122,7 @@ function LendNode({ data, id }: NodeProps) {
       options: { showContent: true },
     },
     {
-      enabled: !!account && (currentAction === 'borrow' || currentAction === 'repay'),
+      enabled: !!account && (currentAction === 'borrow' || currentAction === 'repay') && currentProtocol === 'scallop',
     }
   );
 
@@ -264,8 +265,8 @@ function LendNode({ data, id }: NodeProps) {
         };
       }
     } else if (currentAction === 'withdraw') {
-      // Withdraw checks sCoin balance (unless predecessor deposit exists)
-      if (!hasPredecessorDeposit && walletSCoinBalance <= 0) {
+      // Withdraw checks sCoin balance (Scallop only — Navi has no wallet-side position tokens)
+      if (currentProtocol === 'scallop' && !hasPredecessorDeposit && walletSCoinBalance <= 0) {
         return {
           type: 'error' as const,
           message: `No s${selectedAsset} found in wallet. Deposit first to get sCoin tokens.`,
@@ -464,6 +465,15 @@ function LendNode({ data, id }: NodeProps) {
             return null;
           })()}
           {currentAction === 'withdraw' && (() => {
+            if (currentProtocol === 'navi') {
+              return (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {hasPredecessorDeposit
+                    ? 'Position from prior deposit in flow'
+                    : 'Enter amount to withdraw from Navi position'}
+                </p>
+              );
+            }
             const rate = scallopExchangeRate.rate || 1;
             const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
             const maxWithdrawable = Math.floor(walletSCoinBalance * rate * Math.pow(10, displayDecimals)) / Math.pow(10, displayDecimals);
@@ -549,15 +559,26 @@ function LendNode({ data, id }: NodeProps) {
           </div>
         )}
 
-        {/* Withdraw Info: sCoin burn */}
+        {/* Withdraw Info: sCoin burn (Scallop) or position withdrawal (Navi) */}
         {currentAction === 'withdraw' && receiptTokenAmount && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded px-3 py-2">
-            <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">You Will Burn</div>
+            <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">
+              {currentProtocol === 'navi' ? 'You Will Withdraw' : 'You Will Burn'}
+            </div>
             {receiptTokenAmount.isLoading ? (
               <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Fetching rate...</span>
               </div>
+            ) : currentProtocol === 'navi' ? (
+              <>
+                <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                  {nodeData.lendAmount} {selectedAsset}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  from your Navi lending position
+                </div>
+              </>
             ) : (
               <>
                 <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">

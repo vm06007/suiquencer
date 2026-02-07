@@ -6,7 +6,7 @@ import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
 import { AggregatorClient, Env } from '@cetusprotocol/aggregator-sdk';
 import { executeRoute, getRoutes } from '@lifi/sdk';
-import { TOKENS, SCALLOP, SCALLOP_SCOINS } from '@/config/tokens';
+import { TOKENS, SCALLOP, SCALLOP_SCOINS, NAVI, getNaviPool } from '@/config/tokens';
 import { suiProvider } from '@/config/lifi';
 
 // LI.FI chain/token mappings for re-routing on bridge failure
@@ -452,8 +452,12 @@ export function useExecuteSequence() {
               throw new Error(`Step ${i + 1}: Amount must be greater than 0`);
             }
 
-            if (protocol !== 'scallop') {
-              throw new Error(`Step ${i + 1}: Only Scallop protocol is supported currently`);
+            if (protocol !== 'scallop' && protocol !== 'navi') {
+              throw new Error(`Step ${i + 1}: Only Scallop and Navi protocols are supported currently`);
+            }
+
+            if (protocol === 'navi' && (action === 'borrow' || action === 'repay')) {
+              throw new Error(`Step ${i + 1}: Navi borrow/repay is not yet supported. Use deposit or withdraw.`);
             }
 
             if (action !== 'deposit' && action !== 'withdraw' && action !== 'borrow' && action !== 'repay') {
@@ -1102,6 +1106,100 @@ export function useExecuteSequence() {
               });
 
               console.log(`Added step ${i + 1}: Scallop repay ${amount} ${asset} (obligation: ${finalObligationId?.slice(0, 10)}...)`);
+            } else if (protocol === 'navi' && action === 'deposit') {
+              // Navi deposit: entry_deposit<T>
+              const naviPool = getNaviPool(asset);
+              if (!naviPool) {
+                throw new Error(`Step ${i + 1}: Asset ${asset} is not supported on Navi Protocol`);
+              }
+
+              let depositCoin;
+              if (asset === 'SUI') {
+                [depositCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
+              } else {
+                // Fetch non-SUI coins, merge and split
+                const coins = await suiClient.getCoins({
+                  owner: account.address,
+                  coinType: tokenInfo.coinType,
+                });
+
+                if (!coins.data || coins.data.length === 0) {
+                  throw new Error(`Step ${i + 1}: No ${asset} coins found in wallet`);
+                }
+
+                const totalBalance = coins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
+                if (totalBalance < BigInt(amountInSmallestUnit)) {
+                  throw new Error(`Step ${i + 1}: Insufficient ${asset} balance`);
+                }
+
+                let remainingAmount = BigInt(amountInSmallestUnit);
+                const selectedCoins: string[] = [];
+                for (const coin of coins.data) {
+                  if (remainingAmount <= 0) break;
+                  selectedCoins.push(coin.coinObjectId);
+                  remainingAmount -= BigInt(coin.balance);
+                }
+
+                if (selectedCoins.length > 1) {
+                  const [primaryCoin, ...coinsToMerge] = selectedCoins;
+                  tx.mergeCoins(tx.object(primaryCoin), coinsToMerge.map(c => tx.object(c)));
+                  [depositCoin] = tx.splitCoins(tx.object(primaryCoin), [amountInSmallestUnit]);
+                } else {
+                  [depositCoin] = tx.splitCoins(tx.object(selectedCoins[0]), [amountInSmallestUnit]);
+                }
+              }
+
+              tx.moveCall({
+                target: `${NAVI.packageId}::incentive_v3::entry_deposit`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(NAVI.clock),
+                  tx.object(NAVI.storage),
+                  tx.object(naviPool.poolId),
+                  tx.pure.u8(naviPool.assetId),
+                  depositCoin,
+                  tx.pure.u64(amountInSmallestUnit),
+                  tx.object(NAVI.incentiveV2),
+                  tx.object(NAVI.incentiveV3),
+                ],
+              });
+
+              console.log(`Added step ${i + 1}: Navi deposit ${amount} ${asset} (pool: ${naviPool.poolId.slice(0, 10)}...)`);
+
+            } else if (protocol === 'navi' && action === 'withdraw') {
+              // Navi withdraw: withdraw_v2<T> returns Balance<T>, needs coin::from_balance + transfer
+              const naviPool = getNaviPool(asset);
+              if (!naviPool) {
+                throw new Error(`Step ${i + 1}: Asset ${asset} is not supported on Navi Protocol`);
+              }
+
+              const withdrawnBalance = tx.moveCall({
+                target: `${NAVI.packageId}::incentive_v3::withdraw_v2`,
+                typeArguments: [tokenInfo.coinType],
+                arguments: [
+                  tx.object(NAVI.clock),
+                  tx.object(NAVI.priceOracle),
+                  tx.object(NAVI.storage),
+                  tx.object(naviPool.poolId),
+                  tx.pure.u8(naviPool.assetId),
+                  tx.pure.u64(amountInSmallestUnit),
+                  tx.object(NAVI.incentiveV2),
+                  tx.object(NAVI.incentiveV3),
+                  tx.object('0x5'), // SUI System State
+                ],
+              });
+
+              // Convert Balance<T> → Coin<T>
+              const withdrawnCoin = tx.moveCall({
+                target: '0x2::coin::from_balance',
+                typeArguments: [tokenInfo.coinType],
+                arguments: [withdrawnBalance],
+              });
+
+              // Transfer coin to the user
+              tx.transferObjects([withdrawnCoin], account.address);
+
+              console.log(`Added step ${i + 1}: Navi withdraw ${amount} ${asset} (pool: ${naviPool.poolId.slice(0, 10)}...)`);
             }
           } else if (node.type === 'stake') {
             // Execute staking operation

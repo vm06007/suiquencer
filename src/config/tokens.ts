@@ -93,3 +93,37 @@ export const SCALLOP_SCOINS: Record<string, {
 export function getScallopSCoin(underlyingSymbol: string) {
   return SCALLOP_SCOINS[underlyingSymbol] || null;
 }
+
+// Navi Protocol addresses
+export const NAVI = {
+  packageId: '0xee0041239b89564ce870a7dec5ddc5d114367ab94a1137e90aa0633cb76518e0',
+  storage: '0xbb4e2f4b6205c2e2a2db47aeb4f830796ec7c005f88537ee775986639bc442fe',
+  priceOracle: '0x1568865ed9a0b5ec414220e8f79b3d04c77acc82358f6e5ae4635687392ffbef',
+  incentiveV2: '0xf87a8acb8b81d14307894d12595541a73f19933f88e1326d5be349c7a6f7559c',
+  incentiveV3: '0x62982dad27fb10bb314b3384d5de8d2ac2d72ab2dbeae5d801dbdb9efa816c80',
+  clock: '0x0000000000000000000000000000000000000000000000000000000000000006',
+} as const;
+
+// Navi pool mapping: asset → { assetId, poolId }
+export const NAVI_POOLS: Record<string, { assetId: number; poolId: string }> = {
+  SUI: {
+    assetId: 0,
+    poolId: '0x96df0fce3c471489f4debaaa762cf960b3d97820bd1f3f025ff8190730e958c5',
+  },
+  USDC: {
+    assetId: 10,
+    poolId: '0xa3582097b4c57630046c0c49a88bfc6b202a3ec0a9db5597c31765f7563755a8',
+  },
+  USDT: {
+    assetId: 19,
+    poolId: '0xa3e0471746e5d35043801bce247d3b3784cc74329d39f7ed665446ddcf22a9e2',
+  },
+  WAL: {
+    assetId: 24,
+    poolId: '0xef76883525f5c2ff90cd97732940dbbdba0b391e29de839b10588cee8e4fe167',
+  },
+};
+
+export function getNaviPool(symbol: string) {
+  return NAVI_POOLS[symbol] || null;
+}
