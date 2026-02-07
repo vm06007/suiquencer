@@ -30,29 +30,62 @@ export const TOKENS = {
 
 export type TokenSymbol = keyof typeof TOKENS;
 
-// Scallop sCoin (MarketCoin) type mappings
-// Pattern: {scallop_packageId}::reserve::MarketCoin<{underlying_coinType}>
-const SCALLOP_MARKET_COIN_PKG = '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d';
+// Scallop protocol addresses
+export const SCALLOP = {
+  // Entry-point package (mint_entry, redeem_entry, borrow_entry, repay_entry)
+  protocolPkg: '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d',
+  // Core types package (Version, Market, MarketCoin, Obligation)
+  coreTypePkg: '0xefe8b36d5b2e43728cc323298626b83177803521d195cfb11e15b910e892fddf',
+  // s_coin_converter package (mint_s_coin, burn_s_coin)
+  converterPkg: '0x80ca577876dec91ae6d22090e56c39bc60dce9086ab0729930c6900bc4162b4c',
+  // Shared object IDs
+  version: '0x07871c4b3c847a0f674510d4978d5cf6f960452795e8ff6f189fd2088a3f6ac7',
+  market: '0xa757975255146dc9686aa823b7838b507f315d704f428cbadad2f4ea061939d9',
+  clock: '0x0000000000000000000000000000000000000000000000000000000000000006',
+} as const;
 
-export const SCALLOP_SCOINS: Record<string, { symbol: string; coinType: string; decimals: number }> = {
+// Scallop sCoin types
+// There are TWO representations of deposited value:
+// 1. MarketCoin<T>: raw receipt from mint_entry (coreTypePkg::reserve::MarketCoin<T>)
+// 2. SCALLOP_*: wrapped sCoin from Scallop's UI (separate packages per asset)
+// The UI should query BOTH and show combined balance.
+export const SCALLOP_SCOINS: Record<string, {
+  symbol: string;
+  // The wrapped sCoin type (from Scallop's UI deposits)
+  sCoinType: string;
+  // The raw MarketCoin type (from direct mint_entry calls)
+  marketCoinType: string;
+  // SCoinTreasury object ID for s_coin_converter
+  treasuryId: string;
+  decimals: number;
+}> = {
   SUI: {
     symbol: 'sSUI',
-    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.SUI.coinType}>`,
+    sCoinType: '0xaafc4f740de0dd0dde642a31148fb94517087052f19afb0f7bed1dc41a50c77b::scallop_sui::SCALLOP_SUI',
+    marketCoinType: `${SCALLOP.coreTypePkg}::reserve::MarketCoin<${TOKENS.SUI.coinType}>`,
+    treasuryId: '0x5c1678c8261ac9eec024d4d630006a9f55c80dc0b1aa38a003fcb1d425818c6b',
     decimals: 9,
   },
+  // TODO: Add USDC, USDT, WAL sCoin types once verified on-chain
   USDC: {
     symbol: 'sUSDC',
-    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.USDC.coinType}>`,
+    sCoinType: '', // Needs verification
+    marketCoinType: `${SCALLOP.coreTypePkg}::reserve::MarketCoin<${TOKENS.USDC.coinType}>`,
+    treasuryId: '',
     decimals: 6,
   },
   USDT: {
     symbol: 'sUSDT',
-    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.USDT.coinType}>`,
+    sCoinType: '', // Needs verification
+    marketCoinType: `${SCALLOP.coreTypePkg}::reserve::MarketCoin<${TOKENS.USDT.coinType}>`,
+    treasuryId: '',
     decimals: 6,
   },
   WAL: {
     symbol: 'sWAL',
-    coinType: `${SCALLOP_MARKET_COIN_PKG}::reserve::MarketCoin<${TOKENS.WAL.coinType}>`,
+    sCoinType: '', // Needs verification
+    marketCoinType: `${SCALLOP.coreTypePkg}::reserve::MarketCoin<${TOKENS.WAL.coinType}>`,
+    treasuryId: '',
     decimals: 9,
   },
 };

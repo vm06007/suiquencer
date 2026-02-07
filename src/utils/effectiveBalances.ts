@@ -132,13 +132,14 @@ export function getEffectiveBalances(
     }
 
     // Handle lend nodes (deposit reduces balance, withdraw/borrow increases balance)
-    if (node.type === 'lend' && d.lendAsset && d.lendAmount?.trim()) {
+    if (node.type === 'lend' && d.lendAmount?.trim()) {
       const amt = parseFloat(d.lendAmount);
+      const lendAsset = d.lendAsset || 'SUI';
       if (!Number.isNaN(amt)) {
         const assetKey =
-          resolveOutSymbol(d.lendAsset) ??
-          baseBalances.find((t) => canonicalKey(t.symbol) === canonicalKey(d.lendAsset!))?.symbol ??
-          d.lendAsset;
+          resolveOutSymbol(lendAsset) ??
+          baseBalances.find((t) => canonicalKey(t.symbol) === canonicalKey(lendAsset))?.symbol ??
+          lendAsset;
         const action = d.lendAction || 'deposit';
         if (action === 'deposit' || action === 'repay') {
           balances[assetKey] = (balances[assetKey] ?? 0) - amt;

@@ -6,7 +6,7 @@ import { SuinsClient } from '@mysten/suins';
 import { isValidSuiNSName } from '@mysten/sui/utils';
 import { AggregatorClient, Env } from '@cetusprotocol/aggregator-sdk';
 import { executeRoute, getRoutes } from '@lifi/sdk';
-import { TOKENS } from '@/config/tokens';
+import { TOKENS, SCALLOP, SCALLOP_SCOINS } from '@/config/tokens';
 import { suiProvider } from '@/config/lifi';
 
 // LI.FI chain/token mappings for re-routing on bridge failure
@@ -804,87 +804,141 @@ export function useExecuteSequence() {
             const tokenInfo = TOKENS[asset];
             const amountInSmallestUnit = Math.floor(amount * Math.pow(10, tokenInfo.decimals));
 
-            // Scallop protocol addresses
-            const scallop = {
-              packageId: '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d',
-              version: '0x07871c4b3c847a0f674510d4978d5cf6f960452795e8ff6f189fd2088a3f6ac7',
-              market: '0xa757975255146dc9686aa823b7838b507f315d704f428cbadad2f4ea061939d9',
-              clock: '0x0000000000000000000000000000000000000000000000000000000000000006',
-            };
-
             if (protocol === 'scallop' && action === 'deposit') {
               // Scallop deposit (mint)
               const [coin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
 
               tx.moveCall({
-                target: `${scallop.packageId}::mint::mint_entry`,
+                target: `${SCALLOP.protocolPkg}::mint::mint_entry`,
                 typeArguments: [tokenInfo.coinType],
                 arguments: [
-                  tx.object(scallop.version),
-                  tx.object(scallop.market),
+                  tx.object(SCALLOP.version),
+                  tx.object(SCALLOP.market),
                   coin,
-                  tx.object(scallop.clock),
+                  tx.object(SCALLOP.clock),
                 ],
               });
 
               console.log(`Added step ${i + 1}: Scallop deposit ${amount} ${asset}`);
             } else if (protocol === 'scallop' && action === 'withdraw') {
               // Scallop withdraw (redeem) - burn sCoin to get back underlying asset
-              const sCoinType = `${scallop.packageId}::reserve::MarketCoin<${tokenInfo.coinType}>`;
+              // Users may have SCALLOP_* (wrapped) or MarketCoin (raw) - check both
+              const sCoinConfig = SCALLOP_SCOINS[asset];
+              const marketCoinType = `${SCALLOP.coreTypePkg}::reserve::MarketCoin<${tokenInfo.coinType}>`;
 
               console.log(`Fetching s${asset} coins for withdraw...`);
-              const sCoins = await suiClient.getCoins({
-                owner: account.address,
-                coinType: sCoinType,
-              });
 
-              if (!sCoins.data || sCoins.data.length === 0) {
+              // Try wrapped sCoin first (SCALLOP_SUI, etc.)
+              let hasWrappedSCoin = false;
+              let wrappedCoins: any[] = [];
+              if (sCoinConfig?.sCoinType) {
+                const wrapped = await suiClient.getCoins({
+                  owner: account.address,
+                  coinType: sCoinConfig.sCoinType,
+                });
+                wrappedCoins = wrapped.data || [];
+                hasWrappedSCoin = wrappedCoins.length > 0;
+              }
+
+              // Also check raw MarketCoin
+              const rawCoins = await suiClient.getCoins({
+                owner: account.address,
+                coinType: marketCoinType,
+              });
+              const hasRawMarketCoin = (rawCoins.data?.length || 0) > 0;
+
+              if (!hasWrappedSCoin && !hasRawMarketCoin) {
                 throw new Error(`Step ${i + 1}: No s${asset} coins found in wallet. Deposit first to get sCoin tokens.`);
               }
 
               // Calculate sCoin amount needed based on exchange rate
-              // Rate: 1 sCoin = X underlying. To redeem `amount` underlying, burn amount/rate sCoins
               const exchangeRates: Record<string, number> = {
                 SUI: 1.0931, USDC: 1.0567, USDT: 1.0489, WAL: 1.0123,
               };
               const rate = exchangeRates[asset] || 1.0;
-              const sCoinAmount = Math.ceil((amount / rate) * Math.pow(10, tokenInfo.decimals));
+              let sCoinAmount = Math.ceil((amount / rate) * Math.pow(10, tokenInfo.decimals));
 
-              const totalSCoinBalance = sCoins.data.reduce((sum, coin) => sum + BigInt(coin.balance), BigInt(0));
-              if (totalSCoinBalance < BigInt(sCoinAmount)) {
-                throw new Error(`Step ${i + 1}: Insufficient s${asset}. Need ~${(sCoinAmount / Math.pow(10, tokenInfo.decimals)).toFixed(4)} s${asset}`);
+              // Compute total available sCoin across wrapped + raw
+              const totalWrappedBal = wrappedCoins.reduce((s: bigint, c: any) => s + BigInt(c.balance), BigInt(0));
+              const rawCoinsList = rawCoins.data || [];
+              const totalRawBal = rawCoinsList.reduce((s: bigint, c: any) => s + BigInt(c.balance), BigInt(0));
+              const totalAvailableSCoin = totalWrappedBal + totalRawBal;
+
+              console.log(`  sCoin needed: ${sCoinAmount}, available: ${totalAvailableSCoin.toString()} (wrapped: ${totalWrappedBal.toString()}, raw: ${totalRawBal.toString()})`);
+
+              // Cap at total available — handles MAX button and exchange rate rounding
+              if (BigInt(sCoinAmount) > totalAvailableSCoin && totalAvailableSCoin > BigInt(0)) {
+                sCoinAmount = Number(totalAvailableSCoin);
+                console.log(`  Capped sCoin amount to total available: ${sCoinAmount}`);
               }
 
-              // Select and merge sCoin objects
-              let remainingAmount = BigInt(sCoinAmount);
-              const selectedCoins: string[] = [];
-              for (const coin of sCoins.data) {
-                if (remainingAmount <= 0) break;
-                selectedCoins.push(coin.coinObjectId);
-                remainingAmount -= BigInt(coin.balance);
+              // Helper to select and merge coin objects
+              const selectAndMergeCoins = (coins: any[], neededAmount: number) => {
+                let remaining = BigInt(neededAmount);
+                const selected: string[] = [];
+                for (const coin of coins) {
+                  if (remaining <= 0) break;
+                  selected.push(coin.coinObjectId);
+                  remaining -= BigInt(coin.balance);
+                }
+
+                let coinArg;
+                if (selected.length > 1) {
+                  const [primary, ...rest] = selected;
+                  tx.mergeCoins(tx.object(primary), rest.map(c => tx.object(c)));
+                  [coinArg] = tx.splitCoins(tx.object(primary), [neededAmount]);
+                } else {
+                  [coinArg] = tx.splitCoins(tx.object(selected[0]), [neededAmount]);
+                }
+                return coinArg;
+              };
+
+              let marketCoinArg;
+
+              if (hasWrappedSCoin && sCoinConfig?.treasuryId) {
+                // Convert wrapped sCoin (SCALLOP_SUI) → MarketCoin via burn_s_coin
+                if (totalWrappedBal < BigInt(sCoinAmount)) {
+                  // Not enough wrapped, try raw MarketCoin as fallback
+                  if (hasRawMarketCoin) {
+                    if (totalRawBal < BigInt(sCoinAmount)) {
+                      throw new Error(`Step ${i + 1}: Insufficient s${asset}. Need ~${(sCoinAmount / Math.pow(10, tokenInfo.decimals)).toFixed(4)} s${asset}`);
+                    }
+                    marketCoinArg = selectAndMergeCoins(rawCoinsList, sCoinAmount);
+                  } else {
+                    throw new Error(`Step ${i + 1}: Insufficient s${asset}. Need ~${(sCoinAmount / Math.pow(10, tokenInfo.decimals)).toFixed(4)} s${asset}, available: ${(Number(totalAvailableSCoin) / Math.pow(10, tokenInfo.decimals)).toFixed(4)}`);
+                  }
+                } else {
+                  // Use wrapped sCoin: burn to get MarketCoin
+                  const wrappedCoinArg = selectAndMergeCoins(wrappedCoins, sCoinAmount);
+
+                  marketCoinArg = tx.moveCall({
+                    target: `${SCALLOP.converterPkg}::s_coin_converter::burn_s_coin`,
+                    typeArguments: [sCoinConfig.sCoinType, tokenInfo.coinType],
+                    arguments: [
+                      tx.object(sCoinConfig.treasuryId),
+                      wrappedCoinArg,
+                    ],
+                  });
+
+                  console.log(`  Converting SCALLOP_${asset} → MarketCoin via burn_s_coin`);
+                }
+              } else if (hasRawMarketCoin) {
+                // Use raw MarketCoin directly
+                if (totalRawBal < BigInt(sCoinAmount)) {
+                  throw new Error(`Step ${i + 1}: Insufficient s${asset}. Need ~${(sCoinAmount / Math.pow(10, tokenInfo.decimals)).toFixed(4)} s${asset}, available: ${(Number(totalRawBal) / Math.pow(10, tokenInfo.decimals)).toFixed(4)}`);
+                }
+                marketCoinArg = selectAndMergeCoins(rawCoinsList, sCoinAmount);
               }
 
-              let sCoinArg;
-              if (selectedCoins.length > 1) {
-                const [primaryCoin, ...coinsToMerge] = selectedCoins;
-                tx.mergeCoins(
-                  tx.object(primaryCoin),
-                  coinsToMerge.map(c => tx.object(c))
-                );
-                [sCoinArg] = tx.splitCoins(tx.object(primaryCoin), [sCoinAmount]);
-              } else {
-                [sCoinArg] = tx.splitCoins(tx.object(selectedCoins[0]), [sCoinAmount]);
-              }
-
-              // Call redeem_entry: burns sCoin and returns underlying asset
+              // Call redeem_entry: burns MarketCoin and returns underlying asset
               tx.moveCall({
-                target: `${scallop.packageId}::redeem::redeem_entry`,
+                target: `${SCALLOP.protocolPkg}::redeem::redeem_entry`,
                 typeArguments: [tokenInfo.coinType],
                 arguments: [
-                  tx.object(scallop.version),
-                  tx.object(scallop.market),
-                  sCoinArg,
-                  tx.object(scallop.clock),
+                  tx.object(SCALLOP.version),
+                  tx.object(SCALLOP.market),
+                  marketCoinArg,
+                  tx.object(SCALLOP.clock),
                 ],
               });
 
@@ -897,14 +951,14 @@ export function useExecuteSequence() {
               let finalObligationId = obligationId;
               let finalObligationKeyId = obligationKeyId;
 
-              // If not manually specified, auto-detect from wallet
+              // Auto-detect obligation from wallet
               if (!finalObligationId || !finalObligationKeyId) {
                 console.log(`Auto-detecting Scallop obligation for borrow...`);
 
                 const obligations = await suiClient.getOwnedObjects({
                   owner: account.address,
                   filter: {
-                    StructType: `${scallop.packageId}::obligation::Obligation`,
+                    StructType: `${SCALLOP.coreTypePkg}::obligation::Obligation`,
                   },
                   options: { showContent: true },
                 });
@@ -918,7 +972,7 @@ export function useExecuteSequence() {
                 const obligationKeys = await suiClient.getOwnedObjects({
                   owner: account.address,
                   filter: {
-                    StructType: `${scallop.packageId}::obligation::ObligationKey`,
+                    StructType: `${SCALLOP.coreTypePkg}::obligation::ObligationKey`,
                   },
                   options: { showContent: true },
                 });
@@ -936,17 +990,16 @@ export function useExecuteSequence() {
                 throw new Error(`Step ${i + 1}: Could not find obligation objects for borrow`);
               }
 
-              // Call borrow_entry: borrows from the market using obligation as collateral
               tx.moveCall({
-                target: `${scallop.packageId}::borrow::borrow_entry`,
+                target: `${SCALLOP.protocolPkg}::borrow::borrow_entry`,
                 typeArguments: [tokenInfo.coinType],
                 arguments: [
-                  tx.object(scallop.version),
+                  tx.object(SCALLOP.version),
                   tx.object(finalObligationId),
                   tx.object(finalObligationKeyId),
-                  tx.object(scallop.market),
+                  tx.object(SCALLOP.market),
                   tx.pure.u64(amountInSmallestUnit),
-                  tx.object(scallop.clock),
+                  tx.object(SCALLOP.clock),
                 ],
               });
 
@@ -959,14 +1012,13 @@ export function useExecuteSequence() {
               let finalObligationId = obligationId;
               let finalObligationKeyId = obligationKeyId;
 
-              // Auto-detect obligation if not specified
               if (!finalObligationId || !finalObligationKeyId) {
                 console.log(`Auto-detecting Scallop obligation for repay...`);
 
                 const obligations = await suiClient.getOwnedObjects({
                   owner: account.address,
                   filter: {
-                    StructType: `${scallop.packageId}::obligation::Obligation`,
+                    StructType: `${SCALLOP.coreTypePkg}::obligation::Obligation`,
                   },
                   options: { showContent: true },
                 });
@@ -980,7 +1032,7 @@ export function useExecuteSequence() {
                 const obligationKeys = await suiClient.getOwnedObjects({
                   owner: account.address,
                   filter: {
-                    StructType: `${scallop.packageId}::obligation::ObligationKey`,
+                    StructType: `${SCALLOP.coreTypePkg}::obligation::ObligationKey`,
                   },
                   options: { showContent: true },
                 });
@@ -1003,7 +1055,6 @@ export function useExecuteSequence() {
               if (asset === 'SUI') {
                 [repayCoin] = tx.splitCoins(tx.gas, [amountInSmallestUnit]);
               } else {
-                // Fetch non-SUI coins from wallet
                 const coins = await suiClient.getCoins({
                   owner: account.address,
                   coinType: tokenInfo.coinType,
@@ -1038,17 +1089,16 @@ export function useExecuteSequence() {
                 }
               }
 
-              // Call repay_entry: repays borrowed amount on the obligation
               tx.moveCall({
-                target: `${scallop.packageId}::repay::repay_entry`,
+                target: `${SCALLOP.protocolPkg}::repay::repay_entry`,
                 typeArguments: [tokenInfo.coinType],
                 arguments: [
-                  tx.object(scallop.version),
+                  tx.object(SCALLOP.version),
                   tx.object(finalObligationId),
                   tx.object(finalObligationKeyId),
-                  tx.object(scallop.market),
+                  tx.object(SCALLOP.market),
                   repayCoin,
-                  tx.object(scallop.clock),
+                  tx.object(SCALLOP.clock),
                 ],
               });
 

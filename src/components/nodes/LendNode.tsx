@@ -3,7 +3,7 @@ import { Handle, Position, type NodeProps, useReactFlow, useNodes, useEdges } fr
 import { Landmark, AlertTriangle, X, TrendingUp, Loader2, Plus, Info } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { NodeMenu } from './NodeMenu';
-import { TOKENS, SCALLOP_SCOINS } from '@/config/tokens';
+import { TOKENS, SCALLOP_SCOINS, SCALLOP } from '@/config/tokens';
 import { useEffectiveBalances } from '@/hooks/useEffectiveBalances';
 import { useExecutionSequence } from '@/hooks/useExecutionSequence';
 import { useLendingAPY } from '@/hooks/useLendingAPY';
@@ -71,27 +71,38 @@ function LendNode({ data, id }: NodeProps) {
   // Get effective balances (wallet balance + effects of previous operations)
   const { effectiveBalances } = useEffectiveBalances(id, true);
 
-  // Query sCoin balance for withdraw action
+  // Query sCoin balances for withdraw - both SCALLOP_* (wrapped) and MarketCoin (raw)
   const sCoinInfo = SCALLOP_SCOINS[selectedAsset];
-  const { data: sCoinBalance } = useSuiClientQuery(
+
+  // Query wrapped sCoin balance (e.g. SCALLOP_SUI from Scallop UI deposits)
+  const { data: wrappedSCoinBalance } = useSuiClientQuery(
     'getBalance',
     {
       owner: account?.address || '',
-      coinType: sCoinInfo?.coinType || '',
+      coinType: sCoinInfo?.sCoinType || '',
     },
     {
-      enabled: !!account && !!sCoinInfo && currentAction === 'withdraw',
+      enabled: !!account && !!sCoinInfo?.sCoinType,
     }
   );
 
-  // Query Scallop Obligation for borrow action
-  const scallopProtocolPkg = '0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d';
+  // Query raw MarketCoin balance (from direct mint_entry deposits)
+  const { data: marketCoinBalance } = useSuiClientQuery(
+    'getBalance',
+    {
+      owner: account?.address || '',
+      coinType: sCoinInfo?.marketCoinType || '',
+    },
+    {
+      enabled: !!account && !!sCoinInfo?.marketCoinType,
+    }
+  );
   const { data: obligationObjects } = useSuiClientQuery(
     'getOwnedObjects',
     {
       owner: account?.address || '',
       filter: {
-        StructType: `${scallopProtocolPkg}::obligation::Obligation`,
+        StructType: `${SCALLOP.coreTypePkg}::obligation::Obligation`,
       },
       options: { showContent: true },
     },
@@ -106,7 +117,7 @@ function LendNode({ data, id }: NodeProps) {
     {
       owner: account?.address || '',
       filter: {
-        StructType: `${scallopProtocolPkg}::obligation::ObligationKey`,
+        StructType: `${SCALLOP.coreTypePkg}::obligation::ObligationKey`,
       },
       options: { showContent: true },
     },
@@ -143,11 +154,13 @@ function LendNode({ data, id }: NodeProps) {
     return { hasPredecessorDeposit: foundDeposit, hasPredecessorBorrow: foundBorrow };
   }, [nodes, edges, id, selectedAsset]);
 
-  // Determine if user has sCoin balance in wallet (enables withdraw even without predecessor)
+  // Determine combined sCoin balance in wallet (wrapped SCALLOP_* + raw MarketCoin)
   const walletSCoinBalance = useMemo(() => {
-    if (!sCoinBalance || !sCoinInfo) return 0;
-    return parseInt(sCoinBalance.totalBalance) / Math.pow(10, sCoinInfo.decimals);
-  }, [sCoinBalance, sCoinInfo]);
+    if (!sCoinInfo) return 0;
+    const wrappedBal = wrappedSCoinBalance ? parseInt(wrappedSCoinBalance.totalBalance) / Math.pow(10, sCoinInfo.decimals) : 0;
+    const marketBal = marketCoinBalance ? parseInt(marketCoinBalance.totalBalance) / Math.pow(10, sCoinInfo.decimals) : 0;
+    return wrappedBal + marketBal;
+  }, [wrappedSCoinBalance, marketCoinBalance, sCoinInfo]);
 
   const canWithdraw = hasPredecessorDeposit || walletSCoinBalance > 0;
   const hasObligation = (obligationObjects?.data?.length ?? 0) > 0;
@@ -385,8 +398,8 @@ function LendNode({ data, id }: NodeProps) {
           >
             <option value="deposit">Deposit (Lend)</option>
             <option value="withdraw">Withdraw</option>
-            <option value="borrow">Borrow</option>
-            <option value="repay">Repay</option>
+            <option value="borrow" disabled>Borrow (Need PRO Version)</option>
+            <option value="repay" disabled>Repay (Need PRO Version)</option>
           </select>
         </div>
 
@@ -452,14 +465,33 @@ function LendNode({ data, id }: NodeProps) {
             }
             return null;
           })()}
-          {currentAction === 'withdraw' && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {hasPredecessorDeposit
-                ? `sCoin from prior deposit in flow`
-                : `Wallet: ${walletSCoinBalance.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2)} s${selectedAsset}`
-              }
-            </p>
-          )}
+          {currentAction === 'withdraw' && (() => {
+            const rate = scallopExchangeRate.rate || 1;
+            const displayDecimals = selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2;
+            const maxWithdrawable = Math.floor(walletSCoinBalance * rate * Math.pow(10, displayDecimals)) / Math.pow(10, displayDecimals);
+            return (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center justify-between">
+                {hasPredecessorDeposit
+                  ? <span>sCoin from prior deposit in flow</span>
+                  : <>
+                      <span>Can withdraw: ~{maxWithdrawable.toFixed(displayDecimals)} {selectedAsset}</span>
+                      {walletSCoinBalance > 0 && (
+                        <button
+                          type="button"
+                          className="ml-2 px-1.5 py-0.5 text-[10px] font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateNodeData({ lendAmount: maxWithdrawable.toFixed(displayDecimals) });
+                          }}
+                        >
+                          MAX
+                        </button>
+                      )}
+                    </>
+                }
+              </p>
+            );
+          })()}
           {currentAction === 'borrow' && (
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               {hasObligation
@@ -532,6 +564,9 @@ function LendNode({ data, id }: NodeProps) {
               <>
                 <div className="text-sm font-semibold text-blue-700 dark:text-blue-300">
                   ~{receiptTokenAmount.amount} {receiptTokenAmount.symbol}
+                  <span className="font-normal text-xs text-gray-500 dark:text-gray-400 ml-1">
+                    / {walletSCoinBalance.toFixed(selectedAsset === 'SUI' || selectedAsset === 'WAL' ? 4 : 2)} available
+                  </span>
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   to redeem ~{nodeData.lendAmount} {selectedAsset}

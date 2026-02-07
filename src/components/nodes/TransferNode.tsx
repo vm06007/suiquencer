@@ -298,6 +298,34 @@ function TransferNode({ data, id }: NodeProps) {
     );
   }, [id, setNodes]);
 
+  // Pre-fill amount from predecessor lend/withdraw node
+  const predecessorLendAmount = useMemo(() => {
+    const incomingEdges = edges.filter(e => e.target === id);
+    for (const edge of incomingEdges) {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      if (!sourceNode) continue;
+      const sourceData = sourceNode.data as NodeData;
+      if (sourceNode.type === 'lend' && (sourceData.lendAction === 'withdraw' || sourceData.lendAction === 'borrow')) {
+        const lendAsset = sourceData.lendAsset || 'SUI';
+        const lendAmount = sourceData.lendAmount;
+        if (lendAmount && parseFloat(lendAmount) > 0) {
+          return { amount: lendAmount, asset: lendAsset };
+        }
+      }
+    }
+    return null;
+  }, [edges, nodes, id]);
+
+  useEffect(() => {
+    if (nodeData.amountManuallyEdited || !predecessorLendAmount) return;
+    if (nodeData.amount === predecessorLendAmount.amount && (nodeData.asset || 'SUI') === predecessorLendAmount.asset) return;
+    const updates: Partial<NodeData> = { amount: predecessorLendAmount.amount };
+    if (predecessorLendAmount.asset !== (nodeData.asset || 'SUI')) {
+      updates.asset = predecessorLendAmount.asset;
+    }
+    updateNodeData(updates);
+  }, [predecessorLendAmount, nodeData.amountManuallyEdited, nodeData.amount, nodeData.asset, updateNodeData]);
+
   const handleDelete = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setNodes((nds) => nds.filter((node) => node.id !== id));
