@@ -785,7 +785,7 @@ function BridgeNode({ data, id }: NodeProps) {
         )}
 
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-          💜 Powered by LI.FI - Cross-chain bridge aggregator
+          💜 Powered by LI.FI - Cross-chain aggregator
         </p>
       </div>
 

@@ -49,7 +49,7 @@ export function Sidebar({
         <div className="fixed left-0 top-0 h-screen w-16 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 flex flex-col items-center py-4 gap-2 z-50">
             {/* Logo */}
             <div className="mb-2">
-                <img src="/favicon.svg" alt="Suiquencer" className="w-10 h-10 rounded-lg" />
+                <img src="/favicon.svg" alt="Suiquencer" className="w-10 h-10 rounded-lg brightness-[0.95] hover:brightness-100 transition-all" style={{ background: '#2663eb' }} />
             </div>
 
             {/* Divider */}

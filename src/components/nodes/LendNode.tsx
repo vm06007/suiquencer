@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { Handle, Position, type NodeProps, useReactFlow, useNodes } from '@xyflow/react';
-import { Landmark, AlertTriangle, X, TrendingUp, Loader2 } from 'lucide-react';
+import { Landmark, AlertTriangle, X, TrendingUp, Loader2, Plus } from 'lucide-react';
 import { useSuiClient, useCurrentAccount, useSuiClientQuery } from '@mysten/dapp-kit';
 import { NodeMenu } from './NodeMenu';
 import { TOKENS } from '@/config/tokens';
@@ -376,6 +376,23 @@ function LendNode({ data, id }: NodeProps) {
           position={Position.Right}
           className="!bg-orange-500 !w-3 !h-3"
         />
+
+        {/* Add Sequence button */}
+        <div className="border-t border-gray-200 dark:border-gray-700 p-2 flex justify-center">
+          <button
+            className="flex items-center gap-1 text-sm text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 hover:bg-orange-50 dark:hover:bg-orange-900/20 px-3 py-1 rounded transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              const event = new CustomEvent('addNode', {
+                detail: { sourceNodeId: id }
+              });
+              window.dispatchEvent(event);
+            }}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Sequence</span>
+          </button>
+        </div>
       </div>
 
       {/* Settings Dialog */}
@@ -468,7 +485,7 @@ function LendNode({ data, id }: NodeProps) {
                         // Get APY for each asset
                         const protocolData = nodeData.lendProtocol === 'navi'
                           ? { SUI: { depositAPY: '2.8', borrowAPY: '6.2' }, USDC: { depositAPY: '7.2', borrowAPY: '10.1' }, USDT: { depositAPY: '6.3', borrowAPY: '9.8' }, WAL: { depositAPY: '11.8', borrowAPY: '17.5' } }
-                          : { SUI: { depositAPY: '3.2', borrowAPY: '5.8' }, USDC: { depositAPY: '6.5', borrowAPY: '9.2' }, USDT: { depositAPY: '5.8', borrowAPY: '8.5' }, WAL: { depositAPY: '12.4', borrowAPY: '18.7' } };
+                          : { SUI: { depositAPY: '3.15', borrowAPY: '5.8' }, USDC: { depositAPY: '6.5', borrowAPY: '9.2' }, USDT: { depositAPY: '5.8', borrowAPY: '8.5' }, WAL: { depositAPY: '12.4', borrowAPY: '18.7' } };
                         const assetAPY = protocolData[asset];
                         return (
                           <tr key={asset} className={selectedAsset === asset ? 'bg-orange-50 dark:bg-orange-900/10' : ''}>

@@ -15,7 +15,7 @@ interface ProtocolAPYs {
 // Mock APY data - replace with real API calls later
 const MOCK_APYS: Record<string, ProtocolAPYs> = {
   scallop: {
-    SUI: { depositAPY: '3.2', borrowAPY: '5.8' },
+    SUI: { depositAPY: '3.15', borrowAPY: '5.8' },
     USDC: { depositAPY: '6.5', borrowAPY: '9.2' },
     USDT: { depositAPY: '5.8', borrowAPY: '8.5' },
     WAL: { depositAPY: '12.4', borrowAPY: '18.7' },
