@@ -86,6 +86,7 @@ function SelectorNode({ id }: NodeProps) {
           const nodeType = protocol === 'transfer' ? 'transfer' :
                           protocol === 'swap' ? 'swap' :
                           protocol === 'logic' ? 'logic' :
+                          protocol === 'stake' ? 'stake' :
                           protocol === 'lend' ? 'lend' :
                           protocol === 'custom' ? 'custom' :
                           'protocol';

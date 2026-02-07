@@ -20,6 +20,7 @@ import SelectorNode from './nodes/SelectorNode';
 import LogicNode from './nodes/LogicNode';
 import LendNode from './nodes/LendNode';
 import CustomNode from './nodes/CustomNode';
+import StakeNode from './nodes/StakeNode';
 import BridgeNode from './nodes/BridgeNode';
 import { Sidebar } from './layout/Sidebar';
 import { RightSidebar } from './layout/RightSidebar';
@@ -36,6 +37,7 @@ const nodeTypes: any = {
   swap: SwapNode,
   selector: SelectorNode,
   logic: LogicNode,
+  stake: StakeNode,
   lend: LendNode,
   custom: CustomNode,
   bridge: BridgeNode,

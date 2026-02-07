@@ -52,6 +52,10 @@ export interface NodeData extends Record<string, unknown> {
   lendAsset?: string; // SUI, USDC, USDT
   lendAmount?: string;
   lendProtocol?: string; // scallop, navi
+  // Stake specific
+  stakeProtocol?: string; // native, aftermath, volo
+  stakeAmount?: string;
+  stakeValidator?: string; // validator address for native staking
   // Bridge specific
   bridgeChain?: string; // ethereum, polygon, arbitrum, etc.
   bridgeAsset?: string; // Input asset: SUI, USDC, USDT, WAL
