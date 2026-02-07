@@ -95,7 +95,7 @@ export function RightSidebar({ nodes: _nodes, edges: _edges, onExecute, isExecut
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-2">
               <Play className="w-5 h-5 text-blue-500 dark:text-blue-400" />
-              <h2 className="text-gray-900 dark:text-white font-semibold">Execute Sequence</h2>
+              <h2 className="text-gray-900 dark:text-white font-semibold">Execute SUI Sequence</h2>
             </div>
             <button
               onClick={() => setIsOpen(false)}
@@ -344,16 +344,11 @@ export function RightSidebar({ nodes: _nodes, edges: _edges, onExecute, isExecut
               ) : (
                 <>
                   <Play className="w-5 h-5" />
-                  <span>Execute Sequence</span>
+                  <span>Execute SUI Sequence</span>
                 </>
               )}
             </button>
 
-            {hasSequence && (
-              <p className="text-xs text-gray-500 mt-2 text-center">
-                All steps execute in one atomic transaction ⚛️
-              </p>
-            )}
           </div>
         </div>
       </div>
