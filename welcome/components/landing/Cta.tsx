@@ -65,7 +65,7 @@ export function Cta() {
             viewport={{ once: true }}
             transition={{ delay: 0.5 }}
           >
-            Open beta. No credit card required (yet).
+            Open beta. No payment required (yet).
           </motion.p>
         </FadeIn>
       </div>
