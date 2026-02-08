@@ -49,9 +49,10 @@ export function Header() {
 
   const menuItems = [
     { label: "Features", href: "/#features" },
-    { label: "Use Cases", href: "/#solutions" },
+    { label: "Cases", href: "/#solutions" },
     { label: "Planner", href: "/#planner" },
-    { label: "Pro Mode", href: "/#execution" },
+    { label: "Modes", href: "/#execution" },
+    { label: "Problem", href: "/#problem" },
     { label: "FAQ", href: "/#faq" },
   ];
 

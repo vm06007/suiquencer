@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { Header } from "@/components/landing/Header";
 import { Footer } from "@/components/landing/Footer";
@@ -233,6 +233,43 @@ function CodeBlock({
 export default function DocsPage() {
   const [activeSection, setActiveSection] = useState("overview");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarFixed, setSidebarFixed] = useState(false);
+  const [sidebarLeft, setSidebarLeft] = useState<number | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState<number | null>(null);
+  const contentContainerRef = useRef<HTMLDivElement>(null);
+  const sidebarAnchorRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const updateSidebarPosition = () => {
+      const container = contentContainerRef.current;
+      const sidebar = sidebarRef.current;
+      if (!container || !sidebar) return;
+      const containerRect = container.getBoundingClientRect();
+      const sidebarRect = sidebar.getBoundingClientRect();
+      setSidebarLeft(containerRect.left);
+      setSidebarWidth(sidebarRect.width);
+    };
+
+    updateSidebarPosition();
+    window.addEventListener("resize", updateSidebarPosition);
+    return () => window.removeEventListener("resize", updateSidebarPosition);
+  }, []);
+
+  useEffect(() => {
+    const anchor = sidebarAnchorRef.current;
+    if (!anchor) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setSidebarFixed(!entry.isIntersecting);
+      },
+      { rootMargin: "-112px 0px 0px 0px", threshold: 0 }
+    );
+
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
@@ -275,7 +312,7 @@ export default function DocsPage() {
       </section>
 
       <div className="border-b border-black/5">
-        <div className="container mx-auto px-4 md:px-6">
+        <div className="container mx-auto px-4 md:px-6" ref={contentContainerRef}>
           <div className="lg:hidden py-4 border-b border-black/5 sticky top-[60px] bg-white z-40">
             <button
               onClick={() => setMobileNavOpen(!mobileNavOpen)}
@@ -337,32 +374,39 @@ export default function DocsPage() {
             </AnimatePresence>
           </div>
 
-          <div className="flex">
-            <aside className="hidden lg:block w-64 shrink-0 border-r border-black/5 pr-8 py-12 sticky top-24 self-start h-[calc(100vh-6rem)]">
-              <nav className="space-y-1 h-full overflow-y-auto pr-1">
-                {sidebarItems.map((item) => (
-                  <a
-                    key={item.label}
-                    href={item.href}
-                    onClick={() => setActiveSection(item.href.replace("#", ""))}
-                    className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-200 border-l-2 ${
-                      activeSection === item.href.replace("#", "")
-                        ? "border-[#384CE3] text-[#384CE3] bg-blue-50/50 font-medium"
-                        : "border-transparent text-stone-600 hover:text-[#384CE3] hover:bg-blue-50/30 hover:border-blue-200"
-                    }`}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                  </a>
-                ))}
-                <div className="pt-6 mt-6 border-t border-black/5">
-                  <a href="#" className="flex items-center gap-2 text-sm text-stone-500 hover:text-[#384CE3] px-4 py-2 transition-colors">
-                    <ExternalLink className="h-4 w-4" />
-                    Status
-                    <span className="ml-auto w-2 h-2 bg-green-500 rounded-full" />
-                  </a>
-                </div>
-              </nav>
+          <div className="flex items-start">
+            <aside className="hidden lg:block w-64 shrink-0 border-r border-black/5 pr-8 relative">
+              <div ref={sidebarAnchorRef} className="absolute top-0 left-0 h-px w-px" />
+              <div
+                ref={sidebarRef}
+                className={sidebarFixed ? "fixed top-28" : "relative"}
+                style={sidebarFixed ? { left: sidebarLeft ?? undefined, width: sidebarWidth ?? undefined } : undefined}
+              >
+                <nav className="space-y-1 py-12">
+                  {sidebarItems.map((item) => (
+                    <a
+                      key={item.label}
+                      href={item.href}
+                      onClick={() => setActiveSection(item.href.replace("#", ""))}
+                      className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-all duration-200 border-l-2 ${
+                        activeSection === item.href.replace("#", "")
+                          ? "border-[#384CE3] text-[#384CE3] bg-blue-50/50 font-medium"
+                          : "border-transparent text-stone-600 hover:text-[#384CE3] hover:bg-blue-50/30 hover:border-blue-200"
+                      }`}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </a>
+                  ))}
+                  <div className="pt-6 mt-6 border-t border-black/5">
+                    <a href="#" className="flex items-center gap-2 text-sm text-stone-500 hover:text-[#384CE3] px-4 py-2 transition-colors">
+                      <ExternalLink className="h-4 w-4" />
+                      Status
+                      <span className="ml-auto w-2 h-2 bg-green-500 rounded-full" />
+                    </a>
+                  </div>
+                </nav>
+              </div>
             </aside>
 
             <main className="flex-1 py-12 lg:pl-12 min-w-0">
