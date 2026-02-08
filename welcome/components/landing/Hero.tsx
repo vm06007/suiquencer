@@ -95,14 +95,14 @@ export function Hero() {
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           <div className="max-w-2xl">
             <FadeIn delay={0.1}>
-              <div className="inline-flex items-center gap-2 px-2 md:px-3 py-1 md:py-1.5 bg-blue-50 border border-blue-100 text-[#384CE3] text-[10px] md:text-xs mb-6 md:mb-8">
+              <div className="inline-flex items-center gap-2 px-2 md:px-3 py-1 md:py-1.5 bg-blue-50 border border-blue-100 text-[#384CE3] text-[10px] md:text-xs mb-8 md:mb-10">
                 <span className="w-1.5 h-1.5 bg-[#384CE3] rounded-full animate-pulse" />
                 VISUAL DEFI FLOW BUILDER FOR SUI
               </div>
             </FadeIn>
             
             <FadeIn delay={0.2}>
-              <h1 className="text-4xl md:text-6xl font-semibold tracking-tighter leading-[1.1] mb-6 md:mb-8 text-[#111]">
+              <h1 className="text-4xl md:text-6xl font-semibold tracking-tighter leading-[1.1] mb-8 md:mb-10 text-[#111]">
                 Design multi-step DeFi flows on Sui.
                 <br className="hidden lg:block" />
                 <span className="text-[#384CE3]">

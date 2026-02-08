@@ -15,6 +15,7 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Download,
   ChevronDown,
   Sparkles,
   Boxes,
@@ -39,6 +40,7 @@ const exampleFlows = [
   {
     title: "Swap → Lend",
     description: "Swap SUI to USDC and deposit into Scallop in a single run.",
+    open: true,
     json: `{
   "name": "sui-usdc-lend",
   "nodes": [
@@ -56,6 +58,7 @@ const exampleFlows = [
   {
     title: "Bridge → DeFi",
     description: "Bridge to Base using LI.FI and route into a destination protocol.",
+    open: false,
     json: `{
   "name": "sui-bridge-base",
   "nodes": [
@@ -69,6 +72,7 @@ const exampleFlows = [
   {
     title: "Logic Gate → Branch",
     description: "Only swap if balance exceeds threshold, else send a smaller transfer.",
+    open: false,
     json: `{
   "name": "balance-gate",
   "nodes": [
@@ -83,6 +87,48 @@ const exampleFlows = [
     { "from": "logic", "to": "selector" },
     { "from": "selector", "to": "swap", "branch": "true" },
     { "from": "selector", "to": "transfer", "branch": "false" }
+  ],
+  "atomic": true
+}`,
+  },
+  {
+    title: "Swap → Multi Transfer",
+    description: "Swap into USDC and split the output into multiple transfers.",
+    open: false,
+    json: `{
+  "name": "swap-multi-transfer",
+  "nodes": [
+    { "id": "wallet", "type": "wallet" },
+    { "id": "swap", "type": "swap", "provider": "cetus", "from": "SUI", "to": "USDC" },
+    { "id": "transfer-a", "type": "transfer", "asset": "USDC", "amount": "50", "to": "0xabc..." },
+    { "id": "transfer-b", "type": "transfer", "asset": "USDC", "amount": "25", "to": "0xdef..." }
+  ],
+  "edges": [
+    { "from": "wallet", "to": "swap" },
+    { "from": "swap", "to": "transfer-a" },
+    { "from": "swap", "to": "transfer-b" }
+  ],
+  "atomic": true
+}`,
+  },
+  {
+    title: "Logic Condition → Multi Transfer",
+    description: "Check a balance condition, then fan out to multiple transfers if true.",
+    open: false,
+    json: `{
+  "name": "logic-multi-transfer",
+  "nodes": [
+    { "id": "wallet", "type": "wallet" },
+    { "id": "logic", "type": "logic", "check": "balance", "op": ">=", "value": "5" },
+    { "id": "selector", "type": "selector" },
+    { "id": "transfer-a", "type": "transfer", "asset": "SUI", "amount": "1", "to": "0x111..." },
+    { "id": "transfer-b", "type": "transfer", "asset": "SUI", "amount": "1", "to": "0x222..." }
+  ],
+  "edges": [
+    { "from": "wallet", "to": "logic" },
+    { "from": "logic", "to": "selector" },
+    { "from": "selector", "to": "transfer-a", "branch": "true" },
+    { "from": "selector", "to": "transfer-b", "branch": "true" }
   ],
   "atomic": true
 }`,
@@ -114,8 +160,17 @@ const components = [
   { title: "Custom Node", description: "Call any Move module with type args." },
 ];
 
-function CodeBlock({ code, language = "json" }: { code: string; language?: string }) {
+function CodeBlock({
+  code,
+  language = "json",
+  fileName = "flow.json",
+}: {
+  code: string;
+  language?: string;
+  fileName?: string;
+}) {
   const [copied, setCopied] = useState(false);
+  const downloadHref = `data:application/json;charset=utf-8,${encodeURIComponent(code)}`;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -140,22 +195,32 @@ function CodeBlock({ code, language = "json" }: { code: string; language?: strin
           </div>
           <span className="text-xs font-mono text-stone-500 ml-2">{language}</span>
         </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-white transition-colors px-2 py-1 hover:bg-white/5"
-        >
-          {copied ? (
-            <>
-              <Check className="h-3.5 w-3.5 text-green-400" />
-              <span className="text-green-400">Copied!</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3.5 w-3.5" />
-              <span>Copy</span>
-            </>
-          )}
-        </button>
+        <div className="flex items-center gap-1">
+          <a
+            href={downloadHref}
+            download={fileName}
+            className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-white transition-colors px-2 py-1 hover:bg-white/5"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Download</span>
+          </a>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 text-xs text-stone-400 hover:text-white transition-colors px-2 py-1 hover:bg-white/5"
+          >
+            {copied ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-green-400" />
+                <span className="text-green-400">Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
       <pre className="p-5 overflow-x-auto">
         <code className="font-mono text-sm text-stone-300 leading-relaxed">{code}</code>
@@ -396,18 +461,30 @@ export default function DocsPage() {
                     <h2 className="text-xl md:text-2xl font-semibold tracking-tight">Examples</h2>
                   </div>
                 </FadeIn>
-                <div className="space-y-10">
+                <div className="space-y-4">
                   {exampleFlows.map((flow) => (
-                    <div key={flow.title} className="grid lg:grid-cols-2 gap-6 items-start">
-                      <div>
-                        <h3 className="text-lg font-semibold mb-2">{flow.title}</h3>
-                        <p className="text-sm text-stone-600 mb-4">{flow.description}</p>
-                        <div className="border border-dashed border-stone-300 p-6 text-sm text-stone-500">
+                    <details
+                      key={flow.title}
+                      className="group border border-stone-200 bg-white"
+                      open={flow.open}
+                    >
+                      <summary className="flex items-center justify-between gap-4 p-6 md:p-8 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                        <div>
+                          <h3 className="text-lg font-semibold mb-2">{flow.title}</h3>
+                          <p className="text-sm text-stone-600">{flow.description}</p>
+                        </div>
+                        <ChevronDown className="h-5 w-5 text-stone-500 transition-transform duration-200 group-open:rotate-180" />
+                      </summary>
+                      <div className="px-6 pb-6 md:px-8 md:pb-8">
+                        <div className="border border-dashed border-stone-300 p-6 text-sm text-stone-500 mb-4">
                           Screenshot placeholder (drop your image here)
                         </div>
+                        <CodeBlock
+                          code={flow.json}
+                          fileName={`${flow.title.toLowerCase().replace(/\s+/g, "-").replace(/[^\w-]/g, "")}.json`}
+                        />
                       </div>
-                      <CodeBlock code={flow.json} />
-                    </div>
+                    </details>
                   ))}
                 </div>
               </section>
