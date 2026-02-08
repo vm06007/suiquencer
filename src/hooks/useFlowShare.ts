@@ -2,7 +2,8 @@ import { useState, useCallback } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import type { NodeData } from '@/types';
 import type { Tab } from '@/hooks/useFlowWorkspace';
-import { uploadFlowToIPFS, getShareUrl } from '@/lib/ipfs';
+import { uploadFlowToIPFS, downloadFlowFromIPFS, getShareUrl } from '@/lib/ipfs';
+import { readFlowFromENS } from '@/lib/ens';
 
 interface UseFlowShareOptions {
   nodes: Node<NodeData>[];
@@ -32,6 +33,10 @@ export function useFlowShare({
   const [isSharing, setIsSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [isPrivateShare, setIsPrivateShare] = useState(false);
+  const [isLoadingENS, setIsLoadingENS] = useState(false);
+  const [ensLoadError, setEnsLoadError] = useState<string | null>(null);
+  const [lastCid, setLastCid] = useState<string | undefined>();
+  const [lastEncryptionKey, setLastEncryptionKey] = useState<string | undefined>();
 
   const handleShare = useCallback(async (makePrivate: boolean) => {
     setIsSharing(true);
@@ -53,6 +58,8 @@ export function useFlowShare({
 
       setShareUrl(url);
       setIsPrivateShare(makePrivate);
+      setLastCid(result.cid);
+      setLastEncryptionKey(result.encryptionKey);
 
       return result.cid;
     } catch (err) {
@@ -68,6 +75,9 @@ export function useFlowShare({
     setShareUrl(undefined);
     setShareError(null);
     setIsPrivateShare(false);
+    setLastCid(undefined);
+    setLastEncryptionKey(undefined);
+    setEnsLoadError(null);
     setShareDialogOpen(true);
   }, []);
 
@@ -76,7 +86,46 @@ export function useFlowShare({
     setShareUrl(undefined);
     setShareError(null);
     setIsPrivateShare(false);
+    setLastCid(undefined);
+    setLastEncryptionKey(undefined);
+    setEnsLoadError(null);
   }, []);
+
+  const handleLoadFromENS = useCallback(async (ensName: string) => {
+    setIsLoadingENS(true);
+    setEnsLoadError(null);
+
+    try {
+      const result = await readFlowFromENS(ensName);
+      if (!result) {
+        throw new Error(`No flow found for ${ensName}`);
+      }
+
+      const flowData = await downloadFlowFromIPFS(result.cid, result.encryptionKey);
+
+      if (!flowData.nodes || !Array.isArray(flowData.nodes)) {
+        throw new Error('Invalid flow data: missing nodes');
+      }
+
+      // Load into a new tab
+      const newTab: Tab = {
+        id: getNextTabId(),
+        name: `${ensName}`,
+        nodes: flowData.nodes as Node<NodeData>[],
+        edges: flowData.edges,
+      };
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(newTab.id);
+      setNodes(newTab.nodes);
+      setEdges(newTab.edges);
+      setShareDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load from ENS';
+      setEnsLoadError(message);
+    } finally {
+      setIsLoadingENS(false);
+    }
+  }, [setTabs, setActiveTabId, setNodes, setEdges, getNextTabId]);
 
   const handleLoadSharedFlow = useCallback((loadedNodes: Node[], loadedEdges: Edge[]) => {
     const newTab: Tab = {
@@ -97,9 +146,14 @@ export function useFlowShare({
     isSharing,
     shareError,
     isPrivateShare,
+    isLoadingENS,
+    ensLoadError,
+    lastCid,
+    lastEncryptionKey,
     handleShare,
     handleOpenShareDialog,
     handleCloseShareDialog,
     handleLoadSharedFlow,
+    handleLoadFromENS,
   };
 }

@@ -7,6 +7,7 @@ import {
   addEdge,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -32,6 +33,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useFlowWorkspace } from '@/hooks/useFlowWorkspace';
 import { useFlowFileOperations } from '@/hooks/useFlowFileOperations';
 import { useFlowShare } from '@/hooks/useFlowShare';
+import { useENSShare } from '@/hooks/useENSShare';
 import { useSharedFlowLoader } from '@/hooks/useSharedFlowLoader';
 import type { NodeData } from '@/types';
 
@@ -144,6 +146,7 @@ function FlowCanvas() {
   const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
   const [showMiniMap, setShowMiniMap] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   const { theme, toggleTheme } = useTheme();
   const { executeSequence, isExecuting, lastResult, bridgeStatus, clearResult } = useExecuteSequence();
@@ -184,6 +187,8 @@ function FlowCanvas() {
     setEdges,
     getNextTabId: () => `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
   });
+
+  const ensShare = useENSShare();
 
   const { isLoading: isLoadingSharedFlow } = useSharedFlowLoader({
     onLoadSharedFlow: flowShare.handleLoadSharedFlow,
@@ -320,13 +325,21 @@ function FlowCanvas() {
       return;
     }
 
-    // Case 3: Nothing is selected - create unconnected node in center
+    // Case 3: Nothing is selected - create unconnected node near right sidebar
+    const containerBounds = containerRef.current?.getBoundingClientRect();
+    const screenPosition = containerBounds
+      ? {
+          x: containerBounds.right - 360,
+          y: containerBounds.top + containerBounds.height / 2,
+        }
+      : { x: 600, y: 300 };
+    const flowPosition = screenToFlowPosition(screenPosition);
     const newNode: Node<NodeData> = {
       id: `node-${nodeId++}`,
       type: 'selector',
       position: {
-        x: 400,
-        y: 300,
+        x: flowPosition.x,
+        y: flowPosition.y,
       },
       data: {
         label: 'Select Action',
@@ -335,7 +348,7 @@ function FlowCanvas() {
     };
 
     setNodes((nds) => [...nds, newNode]);
-  }, [selectedEdges, selectedNodes, edges, nodes, setNodes, setEdges, edgeType]);
+  }, [selectedEdges, selectedNodes, edges, nodes, setNodes, setEdges, edgeType, screenToFlowPosition]);
 
   // Handle selection changes
   const handleSelectionChange = useCallback(
@@ -854,6 +867,17 @@ function FlowCanvas() {
         shareUrl={flowShare.shareUrl}
         isSharing={flowShare.isSharing}
         isPrivate={flowShare.isPrivateShare}
+        onSaveToENS={ensShare.handleSaveToENS}
+        isSavingENS={ensShare.isSavingENS}
+        ensSaveError={ensShare.ensSaveError}
+        ensSaveSuccess={ensShare.ensSaveSuccess}
+        ensTxHash={ensShare.ensTxHash}
+        onLoadFromENS={flowShare.handleLoadFromENS}
+        isLoadingENS={flowShare.isLoadingENS}
+        ensLoadError={flowShare.ensLoadError}
+        onResetENS={ensShare.resetENSState}
+        lastCid={flowShare.lastCid}
+        lastEncryptionKey={flowShare.lastEncryptionKey}
       />
       <SuccessModal
         isOpen={!!lastResult}
