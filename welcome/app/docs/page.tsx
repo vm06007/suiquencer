@@ -41,18 +41,106 @@ const exampleFlows = [
     title: "Swap → Lend",
     description: "Swap SUI to USDC and deposit into Scallop in a single run.",
     open: true,
+    image: "/swap-lend.jpg",
+    imageAlt: "Swap and lend flow example",
     json: `{
-  "name": "sui-usdc-lend",
   "nodes": [
-    { "id": "wallet", "type": "wallet" },
-    { "id": "swap", "type": "swap", "provider": "cetus", "from": "SUI", "to": "USDC" },
-    { "id": "lend", "type": "lend", "protocol": "scallop", "asset": "USDC" }
+    {
+      "id": "wallet-1",
+      "type": "wallet",
+      "position": { "x": 242.6674989231081, "y": 415.7145243377569 },
+      "data": { "label": "Your Wallet", "type": "wallet" },
+      "deletable": false,
+      "measured": { "width": 263, "height": 321 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-1",
+      "type": "swap",
+      "position": { "x": 639.9102692801583, "y": 150.181353577296 },
+      "data": {
+        "label": "Swap",
+        "type": "protocol",
+        "protocol": "swap",
+        "amount": "10",
+        "fromAsset": "USDC",
+        "toAsset": "SUI",
+        "estimatedAmountOut": "10.1277",
+        "estimatedAmountOutSymbol": "SUI"
+      },
+      "measured": { "width": 280, "height": 366 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-2",
+      "type": "swap",
+      "position": { "x": 640.0069709190633, "y": 581.8293617098878 },
+      "data": {
+        "label": "Swap",
+        "type": "protocol",
+        "protocol": "swap",
+        "amount": "10",
+        "fromAsset": "USDT",
+        "toAsset": "SUI",
+        "estimatedAmountOut": "10.1205",
+        "estimatedAmountOutSymbol": "SUI"
+      },
+      "measured": { "width": 280, "height": 402 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-3",
+      "type": "lend",
+      "position": { "x": 1044.5503434039217, "y": 317.190707032739 },
+      "data": {
+        "label": "Lend / Borrow",
+        "protocol": "lend",
+        "amount": "",
+        "lendAmount": "30"
+      },
+      "measured": { "width": 320, "height": 518 },
+      "selected": true,
+      "dragging": false
+    }
   ],
   "edges": [
-    { "from": "wallet", "to": "swap" },
-    { "from": "swap", "to": "lend" }
+    {
+      "id": "ewallet-1-node-1",
+      "source": "wallet-1",
+      "target": "node-1",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "id": "ewallet-1-node-2",
+      "source": "wallet-1",
+      "target": "node-2",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "id": "enode-2-node-3",
+      "source": "node-2",
+      "target": "node-3",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "type": "smoothstep",
+      "animated": false,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" },
+      "source": "node-1",
+      "target": "node-3",
+      "id": "xy-edge__node-1-node-3"
+    }
   ],
-  "atomic": true
+  "name": "Suiquence_04-DUAL-Swap-Stake"
 }`,
   },
   {
@@ -70,25 +158,106 @@ const exampleFlows = [
 }`,
   },
   {
-    title: "Logic Gate → Branch",
-    description: "Only swap if balance exceeds threshold, else send a smaller transfer.",
+    title: "Logic → Conditional Transfer",
+    description: "Run a contract check, then send different transfers based on the result.",
     open: false,
+    image: "/logic-transfer.jpg",
+    imageAlt: "Logic and conditional transfer flow example",
     json: `{
-  "name": "balance-gate",
   "nodes": [
-    { "id": "wallet", "type": "wallet" },
-    { "id": "logic", "type": "logic", "check": "balance", "op": ">", "value": "10" },
-    { "id": "selector", "type": "selector" },
-    { "id": "swap", "type": "swap", "provider": "turbos", "from": "SUI", "to": "USDC" },
-    { "id": "transfer", "type": "transfer", "asset": "SUI", "amount": "1" }
+    {
+      "id": "wallet-1",
+      "type": "wallet",
+      "position": { "x": 37.41658795234795, "y": 431.2260293843773 },
+      "data": { "label": "Your Wallet", "type": "wallet" },
+      "deletable": false,
+      "measured": { "width": 263, "height": 281 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-2",
+      "type": "transfer",
+      "position": { "x": 951.3281289054928, "y": 522.2687825539251 },
+      "data": {
+        "label": "Transfer",
+        "type": "protocol",
+        "protocol": "transfer",
+        "asset": "SUI",
+        "amount": "2",
+        "recipientAddress": "@kartik",
+        "amountManuallyEdited": true
+      },
+      "measured": { "width": 280, "height": 307 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-3",
+      "type": "logic",
+      "position": { "x": 519.4712375934386, "y": 187.7285488430467 },
+      "data": {
+        "label": "Logic",
+        "type": "protocol",
+        "protocol": "logic",
+        "amount": "",
+        "logicType": "contract",
+        "contractPackageId": "0x0000000000000000000000000000000000000000000000000000000000000002",
+        "contractModule": "clock",
+        "contractFunction": "timestamp_ms",
+        "contractArguments": "[\"0x6\"]",
+        "contractComparisonOperator": "lt",
+        "contractCompareValue": "100"
+      },
+      "measured": { "width": 337, "height": 648 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-4",
+      "type": "transfer",
+      "position": { "x": 518.2933292354841, "y": 854.7129935457214 },
+      "data": {
+        "label": "Transfer",
+        "type": "protocol",
+        "protocol": "transfer",
+        "asset": "SUI",
+        "amount": "1",
+        "recipientAddress": "@satoshi",
+        "amountManuallyEdited": true
+      },
+      "measured": { "width": 280, "height": 307 },
+      "selected": true,
+      "dragging": false
+    }
   ],
   "edges": [
-    { "from": "wallet", "to": "logic" },
-    { "from": "logic", "to": "selector" },
-    { "from": "selector", "to": "swap", "branch": "true" },
-    { "from": "selector", "to": "transfer", "branch": "false" }
+    {
+      "id": "ewallet-1-node-3",
+      "source": "wallet-1",
+      "target": "node-3",
+      "type": "smoothstep",
+      "animated": false,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "id": "enode-3-node-2",
+      "source": "node-3",
+      "target": "node-2",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "type": "smoothstep",
+      "animated": false,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" },
+      "source": "wallet-1",
+      "target": "node-4",
+      "id": "xy-edge__wallet-1-node-4"
+    }
   ],
-  "atomic": true
+  "name": "suiquencer-lend-and-stake"
 }`,
   },
   {
@@ -223,7 +392,7 @@ function CodeBlock({
           </button>
         </div>
       </div>
-      <pre className="p-5 overflow-x-auto">
+      <pre className="p-5 max-h-[500px] overflow-auto">
         <code className="font-mono text-sm text-stone-300 leading-relaxed">{code}</code>
       </pre>
     </motion.div>
@@ -399,9 +568,14 @@ export default function DocsPage() {
                     </a>
                   ))}
                   <div className="pt-6 mt-6 border-t border-black/5">
-                    <a href="#" className="flex items-center gap-2 text-sm text-stone-500 hover:text-[#384CE3] px-4 py-2 transition-colors">
+                    <a
+                      href="https://my.suiquencer.io"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-sm text-stone-500 hover:text-[#384CE3] px-4 py-2 transition-colors"
+                    >
                       <ExternalLink className="h-4 w-4" />
-                      Status
+                      Try It Out
                       <span className="ml-auto w-2 h-2 bg-green-500 rounded-full" />
                     </a>
                   </div>
@@ -505,6 +679,10 @@ export default function DocsPage() {
                     </div>
                     <h2 className="text-xl md:text-2xl font-semibold tracking-tight">Examples</h2>
                   </div>
+                  <p className="text-base md:text-lg text-stone-600 mb-6 md:mb-8 leading-relaxed">
+                    Explore simple starter flows you can copy or download to import into the app. Use the screenshots
+                    as references, then build more complex sequences from these foundations.
+                  </p>
                 </FadeIn>
                 <div className="space-y-4">
                   {exampleFlows.map((flow) => (
@@ -521,9 +699,20 @@ export default function DocsPage() {
                         <ChevronDown className="h-5 w-5 text-stone-500 transition-transform duration-200 group-open:rotate-180" />
                       </summary>
                       <div className="px-6 pb-6 md:px-8 md:pb-8">
-                        <div className="border border-dashed border-stone-300 p-6 text-sm text-stone-500 mb-4">
-                          Screenshot placeholder (drop your image here)
-                        </div>
+                        {flow.image ? (
+                          <div className="border border-stone-200 bg-white p-3 mb-4">
+                            <img
+                              src={flow.image}
+                              alt={flow.imageAlt || `${flow.title} example`}
+                              className="w-full h-auto"
+                              loading="lazy"
+                            />
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-stone-300 p-6 text-sm text-stone-500 mb-4">
+                            Screenshot placeholder (drop your image here)
+                          </div>
+                        )}
                         <CodeBlock
                           code={flow.json}
                           fileName={`${flow.title.toLowerCase().replace(/\s+/g, "-").replace(/[^\w-]/g, "")}.json`}

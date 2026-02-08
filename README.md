@@ -134,6 +134,14 @@ Suiquencer turns your canvas into a deterministic execution plan before anything
 
 ---
 
+## Complex Transaction Example
+
+Suiquencer can execute multi-step flows in a single atomic transaction. Here is a real on-chain example that combines **Transfer + Stake + Lend + Borrow + Lend**:
+
+- [SuiScan Transaction](https://suiscan.xyz/tx/8PtxUAMXTb6GjWr4iWXxE6eBuT5MxRSRXFMQN6pVBHH3)
+
+---
+
 ## Screenshot
 
 *(Add a screenshot of the app here — e.g. canvas with Wallet, Swap, Lend, and Bridge nodes connected.)*
@@ -220,6 +228,41 @@ For **Bridge** node and cross-chain routing:
 
 ---
 
+## Sponsor Tech Highlights (with code links)
+
+### Sui
+
+Suiquencer builds directly on **Sui** by compiling user flows into **Programmable Transaction Blocks (PTBs)** and executing them atomically via `@mysten/dapp-kit` / `@mysten/sui`, with **SuiNS** name resolution for human‑readable addresses.
+
+- Execution pipeline (atomic transaction assembly):  
+  https://github.com/vm06007/suiquencer/blob/main/src/hooks/useExecuteSequence.ts#L238
+- Transfers + token handling on Sui:  
+  https://github.com/vm06007/suiquencer/blob/main/src/hooks/useExecuteSequence.ts#L276
+- SuiNS resolution during execution:  
+  https://github.com/vm06007/suiquencer/blob/main/src/hooks/useExecuteSequence.ts#L63
+
+### LI.FI
+
+The application uses **LI.FI** to power the Bridge node and cross‑chain routing (Sui ↔ EVM). It fetches live routes/fees and executes the bridge step with status tracking.
+
+- LI.FI SDK config + Sui provider:  
+  https://github.com/vm06007/suiquencer/blob/main/src/config/lifi.ts#L1
+- Route fetching in the Bridge node:  
+  https://github.com/vm06007/suiquencer/blob/main/src/components/nodes/BridgeNode.tsx#L431
+- Bridge execution + retries/status:  
+  https://github.com/vm06007/suiquencer/blob/main/src/hooks/execution/bridge.ts#L49
+
+### ENS
+
+Suiquencer resolves **ENS** names in the Bridge node and also stores shared flows in ENS text records for easy retrieval.
+
+- ENS resolution in Bridge node:  
+  https://github.com/vm06007/suiquencer/blob/main/src/components/nodes/BridgeNode.tsx#L203
+- ENS read/write helpers (text record `suiquencer.flow`):  
+  https://github.com/vm06007/suiquencer/blob/main/src/lib/ens.ts#L5
+
+---
+
 ## Scripts
 
 | Command | Description |
@@ -233,24 +276,27 @@ For **Bridge** node and cross-chain routing:
 
 ## Roadmap
 
-- [x] SUI wallet connection and balance
-- [x] Transfer with SuiNS name resolution
-- [x] Swap via Cetus with real-time quotes and price impact
-- [x] Lend via Scallop with APY rates and exchange rates
-- [x] Bridge via LI.FI to 7+ EVM chains with destination DeFi
-- [x] Logic and Selector nodes for conditional branching
-- [x] Custom Move contract calls with module/function discovery
-- [x] WAL (Walrus) token support
-- [x] Atomic execution of flows
-- [x] Effective balance tracking and validation
-- [x] Save/load flows and multi-tab workspace
-- [x] Real-time Scallop exchange rates and receipt token display
-- [ ] Navi Protocol lending
-- [ ] Turbos and Aftermath swap protocols
-- [ ] Withdraw/Borrow/Repay lending actions
-- [ ] Transaction status tracking for LI.FI bridges
-- [ ] Share flows (read-only links)
-- [ ] Transaction preview / simulation before execution
+**Shipped**
+
+- SUI wallet connection and balance
+- Transfer with SuiNS name resolution
+- Swap via Cetus with real-time quotes and price impact
+- Lend via Scallop with APY rates and exchange rates
+- Bridge via LI.FI to 7+ EVM chains with destination DeFi
+- Logic and Selector nodes for conditional branching
+- Custom Move contract calls with module/function discovery
+- WAL (Walrus) token support
+- Atomic execution of flows
+- Effective balance tracking and validation
+- Save/load flows and multi-tab workspace
+- Real-time Scallop exchange rates and receipt token display
+
+**Up Next**
+
+- Turbos and Aftermath swap protocols
+- Transaction preview / simulation before execution
+- Navi repay action support
+- AI-assisted flow generation, validation, and optimization
 
 ---
 
