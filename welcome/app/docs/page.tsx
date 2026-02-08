@@ -688,42 +688,125 @@ const exampleFlows = [
     title: "Swap → Multi Transfer",
     description: "Swap into USDC and split the output into multiple transfers.",
     open: false,
+    image: "/multi.jpg",
+    imageAlt: "Swap to multiple transfers flow example",
     json: `{
-  "name": "swap-multi-transfer",
   "nodes": [
-    { "id": "wallet", "type": "wallet" },
-    { "id": "swap", "type": "swap", "provider": "cetus", "from": "SUI", "to": "USDC" },
-    { "id": "transfer-a", "type": "transfer", "asset": "USDC", "amount": "50", "to": "0xabc..." },
-    { "id": "transfer-b", "type": "transfer", "asset": "USDC", "amount": "25", "to": "0xdef..." }
+    {
+      "id": "wallet-1",
+      "type": "wallet",
+      "position": { "x": 253.65076878422735, "y": 99.10155691860439 },
+      "data": { "label": "Your Wallet", "type": "wallet" },
+      "deletable": false,
+      "measured": { "width": 262, "height": 320 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-1",
+      "type": "swap",
+      "position": { "x": 569.5769267981058, "y": 82.06463592554363 },
+      "data": {
+        "label": "Swap",
+        "type": "protocol",
+        "protocol": "swap",
+        "amount": "10",
+        "fromAsset": "USDC",
+        "toAsset": "SUI",
+        "estimatedAmountOut": "10.2300",
+        "estimatedAmountOutSymbol": "SUI"
+      },
+      "measured": { "width": 280, "height": 402 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-2",
+      "type": "transfer",
+      "position": { "x": 1226.2415046732003, "y": 130.74155304857445 },
+      "data": {
+        "label": "Transfer",
+        "type": "protocol",
+        "protocol": "transfer",
+        "asset": "SUI",
+        "amount": "3.410000",
+        "recipientAddress": "@satoshi",
+        "amountManuallyEdited": false
+      },
+      "measured": { "width": 280, "height": 307 },
+      "selected": true,
+      "dragging": false
+    },
+    {
+      "id": "node-3",
+      "type": "transfer",
+      "position": { "x": 914.7092350858031, "y": 329.5246301204987 },
+      "data": {
+        "label": "Transfer",
+        "type": "protocol",
+        "protocol": "transfer",
+        "asset": "SUI",
+        "amount": "3.410000",
+        "recipientAddress": "kartik.sui",
+        "amountManuallyEdited": false
+      },
+      "measured": { "width": 280, "height": 307 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-4",
+      "type": "transfer",
+      "position": { "x": 920.7938497261817, "y": -70.26625805484679 },
+      "data": {
+        "label": "Transfer",
+        "type": "protocol",
+        "protocol": "transfer",
+        "asset": "SUI",
+        "amount": "3.410000",
+        "recipientAddress": "@surflux",
+        "amountManuallyEdited": false
+      },
+      "measured": { "width": 280, "height": 307 },
+      "selected": false,
+      "dragging": false
+    }
   ],
   "edges": [
-    { "from": "wallet", "to": "swap" },
-    { "from": "swap", "to": "transfer-a" },
-    { "from": "swap", "to": "transfer-b" }
+    {
+      "id": "ewallet-1-node-1",
+      "source": "wallet-1",
+      "target": "node-1",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "id": "enode-1-node-2",
+      "source": "node-1",
+      "target": "node-2",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "id": "enode-1-node-3",
+      "source": "node-1",
+      "target": "node-3",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "id": "enode-1-node-4",
+      "source": "node-1",
+      "target": "node-4",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    }
   ],
-  "atomic": true
-}`,
-  },
-  {
-    title: "Logic Condition → Multi Transfer",
-    description: "Check a balance condition, then fan out to multiple transfers if true.",
-    open: false,
-    json: `{
-  "name": "logic-multi-transfer",
-  "nodes": [
-    { "id": "wallet", "type": "wallet" },
-    { "id": "logic", "type": "logic", "check": "balance", "op": ">=", "value": "5" },
-    { "id": "selector", "type": "selector" },
-    { "id": "transfer-a", "type": "transfer", "asset": "SUI", "amount": "1", "to": "0x111..." },
-    { "id": "transfer-b", "type": "transfer", "asset": "SUI", "amount": "1", "to": "0x222..." }
-  ],
-  "edges": [
-    { "from": "wallet", "to": "logic" },
-    { "from": "logic", "to": "selector" },
-    { "from": "selector", "to": "transfer-a", "branch": "true" },
-    { "from": "selector", "to": "transfer-b", "branch": "true" }
-  ],
-  "atomic": true
+  "name": "Suiquence_04"
 }`,
   },
 ];
