@@ -157,6 +157,7 @@ const components = [
   { title: "Lend Node", description: "Scallop deposit flows with rate previews." },
   { title: "Bridge Node", description: "LI.FI routes cross-chain transfers." },
   { title: "Logic + Selector", description: "Condition gates and branching execution." },
+  { title: "Stake Node", description: "Stake SUI and receive afSUI for DeFi use." },
   { title: "Custom Node", description: "Call any Move module with type args." },
 ];
 
@@ -337,8 +338,8 @@ export default function DocsPage() {
           </div>
 
           <div className="flex">
-            <aside className="hidden lg:block w-64 shrink-0 border-r border-black/5 pr-8 py-12">
-              <nav className="sticky top-32 space-y-1">
+            <aside className="hidden lg:block w-64 shrink-0 border-r border-black/5 pr-8 py-12 sticky top-24 self-start h-[calc(100vh-6rem)]">
+              <nav className="space-y-1 h-full overflow-y-auto pr-1">
                 {sidebarItems.map((item) => (
                   <a
                     key={item.label}

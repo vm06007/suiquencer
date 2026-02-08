@@ -8,7 +8,7 @@
 
 ## What is Suiquencer?
 
-Suiquencer is a **node-based flow simulator** for SUI. You drag and drop protocol nodes (Wallet, Transfer, Swap, Lend, Bridge, Logic, Selector, Custom), connect them in order, and run the whole sequence at once. Ideal for:
+Suiquencer is a **node-based flow simulator** for SUI. You drag and drop protocol nodes (Wallet, Transfer, Swap, Lend, Bridge, Stake, Logic, Selector, Custom), connect them in order, and run the whole sequence at once. Ideal for:
 
 - **Multi-step DeFi flows** — e.g. swap SUI → USDC, then deposit into Scallop, in one tx
 - **Cross-chain moves** — bridge SUI to Ethereum/Polygon/Arbitrum and into Aave, Lido, Uniswap, etc.
@@ -56,6 +56,7 @@ Flows are **saved automatically** and you can use **multiple tabs** to work on s
 | **Swap** | DEX aggregation via **Cetus Protocol**. Real-time quotes, price impact display, exchange rate. Configurable slippage (0.5%/1%/2%/custom) and deadline. Auto-populates connected transfer nodes with output amounts |
 | **Lend** | **Scallop** deposit with real-time APY rates and exchange rate display. Shows receipt tokens (sSUI, sUSDC, sUSDT, sWAL). Navi Protocol support planned |
 | **Bridge** | **LI.FI** — bridge to 7+ EVM chains with optional DeFi routing (Aave, Lido, Uniswap V3, Compound) on destination. ENS name resolution for EVM addresses. Fee estimation included |
+| **Stake** | Stake SUI and receive liquid staking tokens (e.g. afSUI) to keep DeFi utility while earning rewards |
 | **Logic** | **Balance check** (compare any address/SuiNS balance) or **contract check** (call view function and compare return). Downstream nodes skipped if condition is false |
 | **Selector** | Picks one of several next nodes for branching flows (e.g. after a Logic condition). Animated edge indicator |
 | **Custom** | Call any Move package/module/function. Module and function discovery, type argument support, smart parameter hints with type detection |
@@ -110,6 +111,21 @@ Flows are **saved automatically** and you can use **multiple tabs** to work on s
 - **Right sidebar** — lists execution sequence with effective balances and **Run** button
 - **Atomic execution** — all Sui operations in one `TransactionBlock`; bridge operations execute separately
 - **Success modal** — shows transaction digest, step count, network, and link to SuiVision explorer
+
+### Execution Flow (How it works)
+
+Suiquencer turns your canvas into a deterministic execution plan before anything touches the chain.
+
+1. **Graph build** — the Wallet node is treated as the single entry point; connected nodes form a directed graph.
+2. **Topological sort** — the graph is ordered so every node executes only after its dependencies.
+3. **Validation & balance safety** — each node validates required fields (amounts, assets, addresses, slippage, etc.).  
+   Effective balance is tracked step‑by‑step so downstream nodes can’t overspend what upstream nodes already consumed.
+4. **Logic gates & branching** — Logic nodes evaluate balance/contract checks. If a condition fails, that branch is skipped.  
+   Selector nodes fan out the next node(s) for true/false branches.
+5. **Transaction assembly** — Sui operations (transfer, swap, lend, stake, custom calls) are added to a single `TransactionBlock`.
+6. **Bridge separation** — cross‑chain bridge routes (LI.FI) are queued and executed **after** the atomic Sui transaction.
+7. **Run + finalize** — you approve once, the atomic block executes, then any queued bridge steps run.  
+   The success modal shows digest, step count, and a SuiVision link.
 
 ### Name Resolution
 

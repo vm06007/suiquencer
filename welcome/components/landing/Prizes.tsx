@@ -11,8 +11,8 @@ const problemPoints = [
 
 const commitmentPoints = [
   "Continue expanding protocol coverage (swaps, lending, bridges, Move calls)",
-  "Ship Pro Mode features: logic gates, condition branching, unlimited nodes",
-  "Improve analytics, flow templates, and team collaboration tools",
+  "Pro Mode features: logic gates, condition branching, unlimited actions and nodes",
+  "Integrate AI to enable even more powerful flow creation and guidance",
 ];
 
 export function Prizes() {

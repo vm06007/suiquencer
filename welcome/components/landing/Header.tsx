@@ -3,6 +3,7 @@
 import { useState, useEffect, MouseEvent } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { PlayDemoButton } from "@/components/landing/PlayDemoButton";
 import { Menu, X, Rocket, BookOpen } from "lucide-react";
@@ -11,6 +12,7 @@ import { AnimatePresence, motion } from "framer-motion";
 export function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
   const logoHover = {
     rest: { scale: 1, rotate: 0 },
     hover: { scale: 1.1, rotate: 5 },
@@ -33,6 +35,7 @@ export function Header() {
 
   const handleNavClick = (href: string) => (event: MouseEvent<HTMLAnchorElement>) => {
     if (!href.startsWith("/#")) return;
+    if (pathname !== "/") return;
     event.preventDefault();
     const id = href.replace("/#", "");
     const target = document.getElementById(id);
@@ -94,7 +97,7 @@ export function Header() {
               <Link href="/docs" className="group relative cursor-pointer py-2 mt-1">
                 <span className="text-sm font-bold text-[#384de3] transition-colors relative z-10 inline-flex items-center gap-2">
                   <BookOpen className="h-4 w-4 relative top-[1px]" />
-                  Docs
+                  Documentation
                 </span>
                 <span className="absolute bottom-0 left-0 w-0 h-px bg-[#384CE3] transition-all duration-300 group-hover:w-full" />
               </Link>
@@ -164,7 +167,7 @@ export function Header() {
                   >
                     <span className="text-xl sm:text-2xl font-bold text-[#384de3] transition-colors inline-flex items-center gap-2">
                       <BookOpen className="h-5 w-5" />
-                      Docs
+                      Documentation
                     </span>
                   </Link>
                 </motion.div>
