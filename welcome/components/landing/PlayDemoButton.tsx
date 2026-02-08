@@ -76,12 +76,15 @@ export function PlayDemoButton({ className, onBeforeOpen }: PlayDemoButtonProps)
             </div>
 
             <div className="p-6">
-              <div className="aspect-video w-full bg-stone-900/90 border border-stone-800 flex items-center justify-center text-stone-300 text-sm md:text-base">
-                Demo video placeholder. We will wire the video source here.
+              <div className="aspect-video w-full border border-stone-200 bg-black">
+                <iframe
+                  src="https://player.vimeo.com/video/1163031556"
+                  className="h-full w-full"
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowFullScreen
+                  title="Suiquencer demo video"
+                />
               </div>
-              <p className="mt-4 text-xs md:text-sm text-stone-500">
-                Tip: Replace this area with a video file when ready.
-              </p>
             </div>
           </div>
         </div>

@@ -38,15 +38,6 @@ Flows are **saved automatically** and you can use **multiple tabs** to work on s
 - **Effective balance** — running balance along the sequence so you see spend per step, accounting for amounts consumed by upstream operations
 - **Gas reserve** — 0.01 SUI automatically reserved when spending native SUI
 
-### Supported Tokens
-
-| Token | Symbol | Decimals |
-|-------|--------|----------|
-| Sui | SUI | 9 |
-| USD Coin | USDC | 6 |
-| Tether | USDT | 6 |
-| Walrus | WAL | 9 |
-
 ### Node Types
 
 | Node | Description |
@@ -144,7 +135,7 @@ Suiquencer can execute multi-step flows in a single atomic transaction. Here is 
 
 ## Screenshot
 
-*(Add a screenshot of the app here — e.g. canvas with Wallet, Swap, Lend, and Bridge nodes connected.)*
+![Suiquencer Full Screenshot](welcome/public/full.jpg)
 
 ---
 
