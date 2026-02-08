@@ -147,14 +147,364 @@ const exampleFlows = [
     title: "Bridge → DeFi",
     description: "Bridge to Base using LI.FI and route into a destination protocol.",
     open: false,
+    image: "/bridge.jpg",
+    imageAlt: "Bridge to DeFi flow example",
     json: `{
-  "name": "sui-bridge-base",
   "nodes": [
-    { "id": "wallet", "type": "wallet" },
-    { "id": "bridge", "type": "bridge", "provider": "lifi", "chain": "base", "asset": "USDC" }
+    {
+      "id": "wallet-1",
+      "type": "wallet",
+      "position": { "x": 400.43313608526086, "y": 15.32705302849638 },
+      "data": { "label": "Your Wallet", "type": "wallet" },
+      "deletable": false,
+      "measured": { "width": 262, "height": 320 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-1",
+      "type": "bridge",
+      "position": { "x": 779.3259962384799, "y": -20.53994578239613 },
+      "data": {
+        "label": "Bridge",
+        "type": "protocol",
+        "bridgeChain": "ethereum",
+        "bridgeAsset": "SUI",
+        "bridgeOutputAsset": "USDC",
+        "bridgeAmount": "5",
+        "bridgeProtocol": "aave",
+        "ethereumAddress": "vitally.eth",
+        "lifiRoute": {
+          "id": "264d2390-1d78-4b4f-9438-2363688e999c",
+          "fromChainId": 9270000000000000,
+          "fromAmountUSD": "4.9722",
+          "fromAmount": "5000000000",
+          "fromToken": {
+            "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+            "chainId": 9270000000000000,
+            "symbol": "SUI",
+            "decimals": 9,
+            "name": "SUI",
+            "coinKey": "SUI",
+            "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+            "priceUSD": "0.994438",
+            "tags": []
+          },
+          "fromAddress": "0xa2f298f4f41b575006404c215287f3b1cbbe98e393b2475e1b855da83d886a7a",
+          "toChainId": 1,
+          "toAmountUSD": "3.9419",
+          "toAmount": "3942542",
+          "toAmountMin": "3922829",
+          "toToken": {
+            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "chainId": 1,
+            "symbol": "USDC",
+            "decimals": 6,
+            "name": "USD Coin",
+            "coinKey": "USDC",
+            "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+            "priceUSD": "0.99983",
+            "tags": [
+              "stablecoin"
+            ]
+          },
+          "toAddress": "0x641AD78BAca220C5BD28b51Ce8e0F495e85Fe689",
+          "gasCostUSD": "0.2288",
+          "containsSwitchChain": false,
+          "steps": [
+            {
+              "type": "lifi",
+              "id": "264d2390-1d78-4b4f-9438-2363688e999c:0",
+              "tool": "mayanMCTP",
+              "toolDetails": {
+                "key": "mayanMCTP",
+                "name": "CCTP + Mayan",
+                "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/bridges/mayan.svg"
+              },
+              "action": {
+                "fromToken": {
+                  "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                  "chainId": 9270000000000000,
+                  "symbol": "SUI",
+                  "decimals": 9,
+                  "name": "SUI",
+                  "coinKey": "SUI",
+                  "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                  "priceUSD": "0.994438",
+                  "tags": []
+                },
+                "fromAmount": "5000000000",
+                "toToken": {
+                  "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                  "chainId": 1,
+                  "symbol": "USDC",
+                  "decimals": 6,
+                  "name": "USD Coin",
+                  "coinKey": "USDC",
+                  "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                  "priceUSD": "0.99983",
+                  "tags": [
+                    "stablecoin"
+                  ]
+                },
+                "fromChainId": 9270000000000000,
+                "toChainId": 1,
+                "fromAddress": "0xa2f298f4f41b575006404c215287f3b1cbbe98e393b2475e1b855da83d886a7a",
+                "toAddress": "0x641AD78BAca220C5BD28b51Ce8e0F495e85Fe689"
+              },
+              "estimate": {
+                "tool": "mayanMCTP",
+                "approvalAddress": "0x1231DEB6f5749EF6cE6943a275A1D3E7486F4EaE",
+                "toAmountMin": "3922829",
+                "toAmount": "3942542",
+                "fromAmount": "5000000000",
+                "feeCosts": [
+                  {
+                    "name": "LIFI Fixed Fee",
+                    "description": "Fixed LIFI fee, independent of any other fee",
+                    "token": {
+                      "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                      "chainId": 9270000000000000,
+                      "symbol": "SUI",
+                      "decimals": 9,
+                      "name": "SUI",
+                      "coinKey": "SUI",
+                      "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                      "priceUSD": "0.994438",
+                      "tags": []
+                    },
+                    "amount": "12500000",
+                    "amountUSD": "0.0124",
+                    "percentage": "0.0025",
+                    "included": true,
+                    "feeSplit": {
+                      "integratorFee": "0",
+                      "lifiFee": "12500000"
+                    }
+                  }
+                ],
+                "gasCosts": [
+                  {
+                    "type": "SEND",
+                    "price": "535",
+                    "estimate": "430000",
+                    "limit": "430000",
+                    "amount": "230050000",
+                    "amountUSD": "0.2288",
+                    "token": {
+                      "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                      "chainId": 9270000000000000,
+                      "symbol": "SUI",
+                      "decimals": 9,
+                      "name": "SUI",
+                      "coinKey": "SUI",
+                      "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                      "priceUSD": "0.994438",
+                      "tags": []
+                    }
+                  }
+                ],
+                "executionDuration": 60,
+                "fromAmountUSD": "4.9722",
+                "toAmountUSD": "3.9419",
+                "skipPermit": false
+              },
+              "includedSteps": [
+                {
+                  "id": "2a1bbe12-9f94-4c87-9442-3731bccfaeb4",
+                  "type": "protocol",
+                  "action": {
+                    "fromChainId": 9270000000000000,
+                    "fromAmount": "5000000000",
+                    "fromToken": {
+                      "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                      "chainId": 9270000000000000,
+                      "symbol": "SUI",
+                      "decimals": 9,
+                      "name": "SUI",
+                      "coinKey": "SUI",
+                      "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                      "priceUSD": "0.994438",
+                      "tags": []
+                    },
+                    "toChainId": 9270000000000000,
+                    "toToken": {
+                      "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                      "chainId": 9270000000000000,
+                      "symbol": "SUI",
+                      "decimals": 9,
+                      "name": "SUI",
+                      "coinKey": "SUI",
+                      "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                      "priceUSD": "0.994438",
+                      "tags": []
+                    },
+                    "fromAddress": "0xa2f298f4f41b575006404c215287f3b1cbbe98e393b2475e1b855da83d886a7a",
+                    "toAddress": "0xa2f298f4f41b575006404c215287f3b1cbbe98e393b2475e1b855da83d886a7a",
+                    "jitoBundle": false
+                  },
+                  "estimate": {
+                    "fromAmount": "5000000000",
+                    "toAmount": "4987500000",
+                    "toAmountMin": "4987500000",
+                    "tool": "feeCollection",
+                    "approvalAddress": "0x0000000000000000000000000000000000000000",
+                    "gasCosts": [
+                      {
+                        "type": "SEND",
+                        "price": "535",
+                        "estimate": "130000",
+                        "limit": "169000",
+                        "amount": "69550000",
+                        "amountUSD": "0.0692",
+                        "token": {
+                          "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                          "chainId": 9270000000000000,
+                          "symbol": "SUI",
+                          "decimals": 9,
+                          "name": "SUI",
+                          "coinKey": "SUI",
+                          "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                          "priceUSD": "0.994438",
+                          "tags": []
+                        }
+                      }
+                    ],
+                    "feeCosts": [
+                      {
+                        "name": "LIFI Fixed Fee",
+                        "description": "Fixed LIFI fee, independent of any other fee",
+                        "token": {
+                          "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                          "chainId": 9270000000000000,
+                          "symbol": "SUI",
+                          "decimals": 9,
+                          "name": "SUI",
+                          "coinKey": "SUI",
+                          "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                          "priceUSD": "0.994438",
+                          "tags": []
+                        },
+                        "amount": "12500000",
+                        "amountUSD": "0.0124",
+                        "percentage": "0.0025",
+                        "included": true,
+                        "feeSplit": {
+                          "integratorFee": "0",
+                          "lifiFee": "12500000"
+                        }
+                      }
+                    ],
+                    "executionDuration": 0
+                  },
+                  "tool": "feeCollection",
+                  "toolDetails": {
+                    "key": "feeCollection",
+                    "name": "Integrator Fee",
+                    "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/protocols/feeCollection.svg"
+                  }
+                },
+                {
+                  "id": "f1cee2ba-9ccf-4561-bd2e-234c45d80dc5",
+                  "type": "cross",
+                  "action": {
+                    "fromChainId": 9270000000000000,
+                    "fromAmount": "4987500000",
+                    "fromToken": {
+                      "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                      "chainId": 9270000000000000,
+                      "symbol": "SUI",
+                      "decimals": 9,
+                      "name": "SUI",
+                      "coinKey": "SUI",
+                      "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                      "priceUSD": "0.994438",
+                      "tags": []
+                    },
+                    "toChainId": 1,
+                    "toToken": {
+                      "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                      "chainId": 1,
+                      "symbol": "USDC",
+                      "decimals": 6,
+                      "name": "USD Coin",
+                      "coinKey": "USDC",
+                      "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png",
+                      "priceUSD": "0.99983",
+                      "tags": [
+                        "stablecoin"
+                      ]
+                    },
+                    "fromAddress": "0xa2f298f4f41b575006404c215287f3b1cbbe98e393b2475e1b855da83d886a7a",
+                    "toAddress": "0x641AD78BAca220C5BD28b51Ce8e0F495e85Fe689",
+                    "jitoBundle": false,
+                    "destinationGasConsumption": "0"
+                  },
+                  "estimate": {
+                    "tool": "mayanMCTP",
+                    "fromAmount": "4987500000",
+                    "toAmount": "3942542",
+                    "toAmountMin": "3922829",
+                    "gasCosts": [
+                      {
+                        "type": "SEND",
+                        "price": "535",
+                        "estimate": "300000",
+                        "limit": "390000",
+                        "amount": "160500000",
+                        "amountUSD": "0.1596",
+                        "token": {
+                          "address": "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI",
+                          "chainId": 9270000000000000,
+                          "symbol": "SUI",
+                          "decimals": 9,
+                          "name": "SUI",
+                          "coinKey": "SUI",
+                          "logoURI": "https://s2.coinmarketcap.com/static/img/coins/64x64/20947.png",
+                          "priceUSD": "0.994438",
+                          "tags": []
+                        }
+                      }
+                    ],
+                    "executionDuration": 60,
+                    "approvalAddress": "0x641AD78BAca220C5BD28b51Ce8e0F495e85Fe689",
+                    "feeCosts": []
+                  },
+                  "tool": "mayanMCTP",
+                  "toolDetails": {
+                    "key": "mayanMCTP",
+                    "name": "CCTP + Mayan",
+                    "logoURI": "https://raw.githubusercontent.com/lifinance/types/main/src/assets/icons/bridges/mayan.svg"
+                  }
+                }
+              ],
+              "integrator": "Suiquencer",
+              "executionType": "transaction"
+            }
+          ],
+          "tags": [
+            "RECOMMENDED",
+            "CHEAPEST",
+            "FASTEST"
+          ]
+        }
+      },
+      "measured": { "width": 290, "height": 715 },
+      "selected": true,
+      "dragging": false
+    }
   ],
-  "edges": [{ "from": "wallet", "to": "bridge" }],
-  "atomic": false
+  "edges": [
+    {
+      "id": "ewallet-1-node-1",
+      "source": "wallet-1",
+      "target": "node-1",
+      "type": "default",
+      "animated": false,
+      "style": { "strokeWidth": 2, "stroke": "#a855f7" }
+    }
+  ],
+  "name": "Suiquence_04"
 }`,
   },
   {
@@ -258,6 +608,80 @@ const exampleFlows = [
     }
   ],
   "name": "suiquencer-lend-and-stake"
+}`,
+  },
+  {
+    title: "Custom Move Call → Lend",
+    description: "Call a custom Move module, then lend the output in a follow-up step.",
+    open: false,
+    image: "/custom.jpg",
+    imageAlt: "Custom Move call and lend flow example",
+    json: `{
+  "nodes": [
+    {
+      "id": "wallet-1",
+      "type": "wallet",
+      "position": { "x": 262.74311633884435, "y": -63.90907969390551 },
+      "data": { "label": "Your Wallet", "type": "wallet" },
+      "deletable": false,
+      "measured": { "width": 263, "height": 281 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-1",
+      "type": "custom",
+      "position": { "x": 588.6860933607793, "y": -64.14299284263576 },
+      "data": {
+        "label": "Custom",
+        "type": "protocol",
+        "protocol": "custom",
+        "amount": "",
+        "customPackageId": "0xd384ded6b9e7f4d2c4c9007b0291ef88fbfed8e709bce83d2da69de2d79d013d",
+        "customModule": "mint",
+        "customFunction": "mint_entry",
+        "customArguments": "[\"0x07871c4b3c847a0f674510d4978d5cf6f960452795e8ff6f189fd2088a3f6ac7\",\"0xa757975255146dc9686aa823b7838b507f315d704f428cbadad2f4ea061939d9\",\"1000000000\",\"0x0000000000000000000000000000000000000000000000000000000000000006\"]",
+        "customTypeArguments": "[\"0x2::sui::SUI\"]"
+      },
+      "measured": { "width": 400, "height": 778 },
+      "selected": false,
+      "dragging": false
+    },
+    {
+      "id": "node-2",
+      "type": "lend",
+      "position": { "x": 1060.5707538707284, "y": 184.53392428039507 },
+      "data": {
+        "label": "Lend / Borrow",
+        "type": "protocol",
+        "protocol": "lend",
+        "amount": "",
+        "lendAmount": "1"
+      },
+      "measured": { "width": 320, "height": 518 },
+      "selected": true,
+      "dragging": false
+    }
+  ],
+  "edges": [
+    {
+      "id": "ewallet-1-node-1",
+      "source": "wallet-1",
+      "target": "node-1",
+      "type": "smoothstep",
+      "animated": true,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" }
+    },
+    {
+      "type": "smoothstep",
+      "animated": false,
+      "style": { "strokeWidth": 2, "stroke": "#3b82f6" },
+      "source": "node-1",
+      "target": "node-2",
+      "id": "xy-edge__node-1-node-2"
+    }
+  ],
+  "name": "Suiquencer-custom"
 }`,
   },
   {
