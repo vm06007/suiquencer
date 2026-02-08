@@ -37,7 +37,7 @@ export function Cta() {
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            Open the canvas, connect your wallet, and execute multi-step DeFi flows in minutes.
+            Open the canvas, connect your wallet, and execute multi-step DeFi flows in seconds.
           </motion.p>
         </FadeIn>
         

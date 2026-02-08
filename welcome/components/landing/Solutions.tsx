@@ -50,7 +50,7 @@ export function Solutions() {
                   <span className="text-sm text-[#384CE3] font-medium tracking-wider uppercase">For Builders</span>
                 </div>
                 
-                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-stone-900 mb-3 md:mb-4">Prototype flows in minutes.</h3>
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-stone-900 mb-3 md:mb-4">Prototype flows in seconds.</h3>
                 <p className="text-sm md:text-base text-stone-600 mb-6 md:mb-8 leading-relaxed">
                   Drag nodes, connect edges, and save reusable flow JSON for testing or sharing with your team.
                 </p>

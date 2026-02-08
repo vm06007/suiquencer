@@ -237,13 +237,6 @@ export function Hero() {
               </motion.div>
             </FadeIn>
 
-            {/* Small decorative element */}
-            <motion.div 
-              className="absolute bottom-4 left-4 h-4 w-4 bg-[#384CE3]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.3 }}
-            />
           </div>
         </div>
       </div>

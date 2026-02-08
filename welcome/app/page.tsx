@@ -8,6 +8,7 @@ import { Logos } from "@/components/landing/Logos";
 import { Solutions } from "@/components/landing/Solutions";
 import { PricingCalculator } from "@/components/landing/PricingCalculator";
 import { Security } from "@/components/landing/Security";
+import { Prizes } from "@/components/landing/Prizes";
 import { Faq } from "@/components/landing/Faq";
 import { Cta } from "@/components/landing/Cta";
 import { Footer } from "@/components/landing/Footer";
@@ -24,6 +25,7 @@ export default function Home() {
       <Solutions />
       <PricingCalculator />
       <Security />
+      <Prizes />
       <Faq />
       <Cta />
       <Footer />

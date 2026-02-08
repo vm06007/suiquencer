@@ -258,7 +258,7 @@ function StakeNode({ data, id }: NodeProps) {
               <Droplets className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
               <p className="text-xs text-blue-700 dark:text-blue-300">
                 {protocol === 'aftermath'
-                  ? 'Receive afSUI - usable in DeFi while earning staking rewards'
+                  ? 'Receive afSUI - usable in DeFi while earning rewards'
                   : 'Receive vSUI - tradable on DEXes and usable as collateral'}
               </p>
             </div>
